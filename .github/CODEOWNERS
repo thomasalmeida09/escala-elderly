@@ -1,0 +1,5 @@
+# CODEOWNERS — Revisão obrigatória por pares na branch main
+* @thomasalmeida09 @augustoheiss
+/.github/ @thomasalmeida09 @augustoheiss
+/src/theme/ @thomasalmeida09 @augustoheiss
+/src/hooks/ @thomasalmeida09 @augustoheiss
