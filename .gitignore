@@ -12,6 +12,7 @@ node_modules
 dist
 dist-ssr
 coverage
+*.tsbuildinfo
 *.local
 
 # Enforce single canonical lockfile (bun.lock — ADR-FE-002)

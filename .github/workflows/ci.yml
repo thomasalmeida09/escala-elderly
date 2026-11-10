@@ -10,6 +10,9 @@ on:
 permissions:
   contents: read
 
+env:
+  LC_ALL: C.UTF-8
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -17,36 +20,40 @@ concurrency:
 jobs:
   frontend-ci:
     name: Build, Typecheck, Lint & Bundle Budget Gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       # 40-char SHA pinned against tag-hijacking (agency-devops-automator)
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (Node 24)
 
       - name: Setup Bun runtime
-        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0 (Node 24)
         with:
-          bun-version: latest
+          bun-version: '1.4.4'
 
-      - name: Zero-Bloat Dependency Gate (agency-frontend-developer)
+      - name: Zero-Bloat Dependency & Single-Lockfile Gate (agency-frontend-developer)
         run: |
-          echo "Auditing package.json against redundant utility bloat..."
+          echo "Auditing package.json against redundant utility bloat and competing lockfiles..."
           if grep -E '"(lodash|moment|axios|classnames|uuid)"\s*:' package.json; then
-            echo "::error::Banned utility package detected in package.json! Prefer native Web APIs (Intl, fetch, crypto.randomUUID)."
+            echo "::error title=Zero-Bloat Gate::Banned utility package detected in package.json! Prefer native Web APIs (Intl, fetch, crypto.randomUUID)."
             exit 1
           fi
-          echo "Zero-Bloat Dependency Gate passed."
+          if git ls-files | grep -E '(^|/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$'; then
+            echo "::error title=Single Lockfile Gate::Competing lockfile detected! Keep only bun.lock (ADR-FE-002)."
+            exit 1
+          fi
+          echo "Zero-Bloat & Single-Lockfile Gate passed."
 
       - name: Broken-Windows Static Audit (agency-code-reviewer)
         run: |
-          echo "Scanning src/ for debugger statements and empty swallowed catch blocks..."
-          if grep -rnE '\bdebugger\s*;' src/; then
-            echo "::error::Residual 'debugger;' statement found in src/!"
+          echo "Scanning src/ and tests/ for debugger statements and empty swallowed catch blocks..."
+          if grep -rnE '\bdebugger\s*;' src/ tests/; then
+            echo "::error title=Debugger Statement::Residual 'debugger;' statement found in src/ or tests/!"
             exit 1
           fi
-          if grep -rnPzo 'catch\s*(\([^)]*\))?\s*\{\s*\}' src/ >/dev/null 2>&1; then
-            echo "::error::Empty swallowed catch block detected in src/ (Dead Programs Tell No Lies)."
+          if grep -rnPzo 'catch\s*(\([^)]*\))?\s*\{\s*\}' src/ tests/ >/dev/null 2>&1; then
+            echo "::error title=Empty Catch Block::Empty swallowed catch block detected in src/ or tests/ (Dead Programs Tell No Lies)."
             exit 1
           fi
           echo "Broken-Windows Static Audit passed."
@@ -54,52 +61,136 @@ jobs:
       - name: Deterministic Dependency Install (frozen lockfile)
         run: bun install --frozen-lockfile
 
+      - name: Verify Code Formatting (Prettier — ADR-FE-008)
+        run: |
+          if ! bun run format:check; then
+            echo "::error title=Prettier Formatting Gate::Code formatting deviation detected! Run 'bun run format' before committing."
+            exit 1
+          fi
+
       - name: Run ESLint Verification
         run: bun run lint
+
+      - name: Run Vitest Fitness & Unit Test Suite
+        run: bun run test
 
       - name: Run TypeScript Compiler & Vite Production Build
         run: bun run build
 
+      - name: Verify Gzipped Bundle Budget Gate
+        run: |
+          shopt -s nullglob
+          js_files=(dist/assets/*.js)
+          css_files=(dist/assets/*.css)
+          if [ "${#js_files[@]}" -lt 1 ] || [ "${#css_files[@]}" -lt 1 ]; then
+            echo "::error title=Bundle Budget Gate::Expected at least 1 JS and 1 CSS asset in dist/assets/!"
+            exit 1
+          fi
+
+          MAX_JS_CHUNK_BYTES=163840
+          MAX_JS_TOTAL_BYTES=266240
+          MAX_CSS_TOTAL_BYTES=25600
+          total_js_gz=0
+          total_css_gz=0
+
+          summary_md="### 📦 Production Bundle Gzip Budget Report"$'\n\n'
+          summary_md+="| Asset | Gzipped Bytes | KiB | Ceiling |"$'\n'
+          summary_md+="| :--- | ---: | ---: | ---: |"$'\n'
+
+          for f in "${js_files[@]}"; do
+            gz_bytes=$(gzip -n -9 -c "$f" | wc -c | tr -d ' ')
+            total_js_gz=$((total_js_gz + gz_bytes))
+            kib=$(awk -v b="$gz_bytes" 'BEGIN { printf "%.2f", b / 1024 }')
+            summary_md+="| \`$(basename "$f")\` | ${gz_bytes} B | ${kib} KiB | 160.00 KiB |"$'\n'
+            if [ "$gz_bytes" -gt "$MAX_JS_CHUNK_BYTES" ]; then
+              echo "::error title=JS Chunk Budget Exceeded::$(basename "$f") is ${gz_bytes} B gzipped (> ${MAX_JS_CHUNK_BYTES} B / 160 KiB ceiling)."
+              exit 1
+            fi
+          done
+
+          for f in "${css_files[@]}"; do
+            gz_bytes=$(gzip -n -9 -c "$f" | wc -c | tr -d ' ')
+            total_css_gz=$((total_css_gz + gz_bytes))
+            kib=$(awk -v b="$gz_bytes" 'BEGIN { printf "%.2f", b / 1024 }')
+            summary_md+="| \`$(basename "$f")\` | ${gz_bytes} B | ${kib} KiB | 25.00 KiB |"$'\n'
+          done
+
+          total_js_kib=$(awk -v b="$total_js_gz" 'BEGIN { printf "%.2f", b / 1024 }')
+          total_css_kib=$(awk -v b="$total_css_gz" 'BEGIN { printf "%.2f", b / 1024 }')
+          summary_md+="| **Total JS** | **${total_js_gz} B** | **${total_js_kib} KiB** | **260.00 KiB** |"$'\n'
+          summary_md+="| **Total CSS** | **${total_css_gz} B** | **${total_css_kib} KiB** | **25.00 KiB** |"$'\n'
+
+          echo "$summary_md"
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            echo "$summary_md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ "$total_js_gz" -gt "$MAX_JS_TOTAL_BYTES" ]; then
+            echo "::error title=Aggregate JS Budget Exceeded::Total JS is ${total_js_gz} B gzipped (> ${MAX_JS_TOTAL_BYTES} B / 260 KiB ceiling)."
+            exit 1
+          fi
+          if [ "$total_css_gz" -gt "$MAX_CSS_TOTAL_BYTES" ]; then
+            echo "::error title=Aggregate CSS Budget Exceeded::Total CSS is ${total_css_gz} B gzipped (> ${MAX_CSS_TOTAL_BYTES} B / 25 KiB ceiling)."
+            exit 1
+          fi
+          echo "Bundle Budget Gate passed."
+
   clean-room-security:
     name: Secret, Credential & LGPD Clean-Room Hygiene Gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (Node 24)
         with:
           fetch-depth: 0
+
+      - name: Block UTF-8 BOM & CRLF regressions in tracked text files (POSIX hygiene)
+        run: |
+          echo "Scanning all tracked text files for UTF-8 BOM (0xEF 0xBB 0xBF) and CRLF..."
+          bom_files=$(git ls-files -z | grep -zvE '\.(png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|pdf)$' | LC_ALL=C xargs -0 grep -l $'^\xef\xbb\xbf' 2>/dev/null || true)
+          if [ -n "$bom_files" ]; then
+            echo "::error title=UTF-8 BOM Detected::UTF-8 BOM (0xEF 0xBB 0xBF) detected in: $bom_files. Save files as UTF-8 without BOM."
+            exit 1
+          fi
+          eol_bad=$(git ls-files --eol | grep -E '^(i/crlf|w/crlf|i/mixed|w/mixed)\b' || true)
+          cr_files=$(git ls-files -z | grep -zvE '\.(png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|pdf)$' | LC_ALL=C.UTF-8 xargs -0 grep -UPl '\r' 2>/dev/null || true)
+          if [ -n "$eol_bad" ] || [ -n "$cr_files" ]; then
+            echo "::error title=CRLF Line Ending Detected::Non-LF line endings detected! EOL status: $eol_bad | CR files: $cr_files"
+            exit 1
+          fi
+          echo "UTF-8 BOM & LF hygiene check passed (0 BOM, 100% LF)."
 
       - name: Block committed .env files, private keys & hardcoded tokens (agency-secrets-credential-hygiene-engineer)
         run: |
           echo "Checking tracked files for committed .env or private keys..."
           if git ls-files | grep -E '(^|/)\.env(\..+)?$' | grep -vE '\.env\.example$'; then
-            echo "::error::Committed .env file detected! Commit only .env.example with synthetic placeholders."
+            echo "::error title=Committed Env File::Committed .env file detected! Commit only .env.example with synthetic placeholders."
             exit 1
           fi
-          if grep -rnE '(BEGIN (RSA|OPENSSH|EC|PGP|PRIVATE) KEY|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|sk-[A-Za-z0-9]{20,})' src/ public/ package.json 2>/dev/null; then
-            echo "::error::Hardcoded secret or private key pattern detected!"
+          if grep -rnE '(BEGIN (RSA|OPENSSH|EC|PGP|PRIVATE) KEY|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|sk-[A-Za-z0-9]{20,})' src/ public/ tests/ package.json vite.config.ts vitest.config.ts 2>/dev/null; then
+            echo "::error title=Hardcoded Secret::Hardcoded secret or private key pattern detected!"
             exit 1
           fi
-          if grep -rnE 'VITE_[A-Z0-9_]*(SECRET|PRIVATE|PASSWORD|PASSWD)' src/ 2>/dev/null; then
-            echo "::error::Client-exposed secret variable (VITE_*_SECRET/PASSWORD) detected in src/!"
+          if grep -rnE 'VITE_[A-Z0-9_]*(SECRET|PRIVATE|PASSWORD|PASSWD)' src/ public/ tests/ 2>/dev/null; then
+            echo "::error title=Exposed Vite Secret::Client-exposed secret variable (VITE_*_SECRET/PASSWORD) detected!"
             exit 1
           fi
           echo "Secrets & Credential Hygiene check passed."
 
       - name: Block bundled reference PDFs & Brazilian PII / CPF leaks (agency-clean-room-data-hygiene-engineer)
         run: |
-          echo "Scanning src/ and public/ for bundled reference PDFs and LGPD PII patterns..."
-          if git ls-files public/ src/ | grep -iE '\.pdf$'; then
-            echo "::error::Bundled PDF detected in public/ or src/! Never ship reference PDFs in the repository."
+          echo "Scanning src/, public/, and tests/ for bundled reference PDFs and LGPD PII patterns..."
+          if git ls-files public/ src/ tests/ | grep -iE '\.pdf$'; then
+            echo "::error title=Bundled PDF::Bundled PDF detected in public/, src/, or tests/! Never ship reference PDFs in the repository."
             exit 1
           fi
-          if grep -rnE '\b[0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2}\b|\b[0-9]{2}\.[0-9]{3}\.[0-9]{3}/[0-9]{4}-[0-9]{2}\b' src/ public/ 2>/dev/null; then
-            echo "::error::Potential Brazilian CPF/CNPJ detected in src/ or public/! Use synthetic test fixtures only."
+          if grep -rnE '\b[0-9]{3}\.[0-9]{3}\.[0-9]{3}-[0-9]{2}\b|\b[0-9]{2}\.[0-9]{3}\.[0-9]{3}/[0-9]{4}-[0-9]{2}\b' src/ public/ tests/ 2>/dev/null; then
+            echo "::error title=LGPD CPF/CNPJ Leak::Potential Brazilian CPF/CNPJ detected in src/, public/, or tests/! Use synthetic test fixtures only."
             exit 1
           fi
-          if grep -rnP '\b[A-Za-z0-9._%+-]+@(?!([A-Za-z0-9-]+\.)?(example\.(com|org|net)|test|invalid|localhost)\b)[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b' src/ public/ 2>/dev/null; then
-            echo "::error::Non-reserved email domain detected in src/ or public/! Use RFC 2606 reserved domains (@example.com) in fixtures."
+          if grep -rnP '\b[A-Za-z0-9._%+-]+@(?!([A-Za-z0-9-]+\.)?(example\.(com|org|net)|test|invalid|localhost)\b)[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b' src/ public/ tests/ 2>/dev/null; then
+            echo "::error title=Non-Reserved Email::Non-reserved email domain detected in src/, public/, or tests/! Use RFC 2606 reserved domains (@example.com) in fixtures."
             exit 1
           fi
           echo "Clean-Room & LGPD Data Hygiene check passed."
