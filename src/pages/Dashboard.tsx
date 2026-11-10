@@ -13,7 +13,7 @@ export default function Dashboard() {
       <Container maxWidth="xs">
         {/* Cabeçalho Tech Industrial */}
         <Box sx={styles.headerBox}>
-          <Text variant="h5">DASHBORD</Text>
+          <Text variant="h5">DASHBOARD</Text>
           <Box sx={styles.headerDivider}>
             <Text variant="caption">PAINEL DO GERENTE // MONITOR</Text>
             <Text variant="caption" sx={{ color: 'primary.main' }}>
