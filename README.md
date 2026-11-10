@@ -47,10 +47,18 @@ O projeto segue o padrão de **Componentização com Estilos Isolados (`.styles.
 
 ```text
 escala-elderly/
+├── .github/
+│   ├── workflows/
+│   │   └── ci.yml                         # Pipeline CI Dual-Job (Build/Lint/Zero-Bloat & LGPD Gate)
+│   ├── CODEOWNERS                         # Roteamento automático de Code Review (@thomasalmeida09 @augustoheiss)
+│   ├── pull_request_template.md           # Checklist automatizado de governança em PRs
+│   └── ruleset-main-protection.json       # Definição auditável de proteção da branch main
 ├── docs/
 │   └── adr/
 │       ├── README.md                      # Catálogo de ADRs (Grupo 1: Tomadas | Grupo 2: Governança)
 │       └── QUADRO-KANBAN-SPRINTS.md       # Divisão das Issues por Sprints e Colunas
+├── public/
+│   └── favicon.svg                        # Ícone vetorial da aplicação
 ├── src/
 │   ├── components/
 │   │   ├── CardCuidador/                  # Card individual de status do cuidador (.tsx + .styles.ts)
@@ -67,8 +75,18 @@ escala-elderly/
 │   ├── theme/
 │   │   └── theme.ts                       # Tokens visuais do tema "warmCareTheme" (MUI)
 │   ├── App.tsx                            # Provedor global de tema e CssBaseline
+│   ├── index.css                          # Reset limpo de viewport e fundação @media print A4
 │   └── main.tsx                           # Ponto de entrada da aplicação React 19
-└── package.json
+├── .editorconfig                          # Padrão UTF-8 sem BOM e quebras de linha LF
+├── .gitattributes                         # Normalização determinística de LF no Git
+├── .gitignore                             # Exclusão de artefatos de build, .env e lockfiles externos
+├── .prettierignore                        # Escopo protegido do formatador Prettier
+├── .prettierrc                            # Configuração oficial do Prettier (ADR-FE-008)
+├── bun.lock                               # Lockfile determinístico do Bun
+├── eslint.config.js                       # Regras de linting (ESLint 10 + TypeScript + React Hooks)
+├── index.html                             # Shell HTML (lang="pt-BR" + Google Fonts Inter & JetBrains Mono)
+├── package.json                           # Manifesto de dependências e scripts (100% Material UI)
+└── vite.config.ts                         # Configuração do bundler Vite 8
 ```
 
 ---
@@ -82,13 +100,17 @@ escala-elderly/
 ### Passo a passo
 
 ```bash
-# 1. Instalar as dependências
+# 1. Instalar as dependências (respeitando bun.lock)
 bun install
 
 # 2. Iniciar o servidor de desenvolvimento (Vite HMR)
 bun run dev
 
-# 3. Validar o Linter (ESLint) e o Build de Produção (TypeScript + Vite)
+# 3. Padronizar e verificar formatação automática (Prettier — ADR-FE-008)
+bun run format
+bun run format:check
+
+# 4. Validar o Linter (ESLint) e o Build de Produção (TypeScript + Vite)
 bun run lint
 bun run build
 ```
