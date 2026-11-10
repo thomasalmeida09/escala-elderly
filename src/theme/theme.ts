@@ -26,13 +26,14 @@ export const warmCareTheme = createTheme({
     borderRadius: 8,
   },
   typography: {
-    fontFamily: '"Inter", "Helvetica", sans-serif',
+    fontFamily: '"Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica", sans-serif',
     h5: {
       fontWeight: 800,
       letterSpacing: '-0.03em',
     },
     caption: {
-      fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+      fontFamily:
+        '"JetBrains Mono", ui-monospace, "Cascadia Code", "Fira Code", Consolas, monospace',
       letterSpacing: '0.08em',
       fontSize: '0.7rem',
     },
