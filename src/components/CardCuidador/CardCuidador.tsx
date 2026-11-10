@@ -21,9 +21,7 @@ export default function CardCuidador({ cuidador }: CardCuidadorProps) {
         </Text>
       </Box>
 
-      <Box sx={styles.badge(isFaltou)}>
-        {cuidador.status}
-      </Box>
+      <Box sx={styles.badge(isFaltou)}>{cuidador.status}</Box>
     </Box>
   );
 }

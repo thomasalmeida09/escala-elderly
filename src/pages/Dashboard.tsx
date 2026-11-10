@@ -2,7 +2,7 @@ import { Container, Box, CircularProgress } from '@mui/material';
 import CardCuidador from '../components/CardCuidador/CardCuidador';
 import SimuladorPainel from '../components/SimuladorPainel/SimuladorPainel';
 import Text from '../components/common/Text';
-import { styles } from './Dashboard.styles'; 
+import { styles } from './Dashboard.styles';
 import { useCaregivers } from '../hooks/useCaregivers';
 
 export default function Dashboard() {
@@ -11,13 +11,14 @@ export default function Dashboard() {
   return (
     <Box sx={styles.pageWrapper}>
       <Container maxWidth="xs">
-        
         {/* Cabeçalho Tech Industrial */}
         <Box sx={styles.headerBox}>
           <Text variant="h5">DASHBORD</Text>
           <Box sx={styles.headerDivider}>
             <Text variant="caption">PAINEL DO GERENTE // MONITOR</Text>
-            <Text variant="caption" sx={{ color: 'primary.main' }}>● ONLINE</Text>
+            <Text variant="caption" sx={{ color: 'primary.main' }}>
+              ● ONLINE
+            </Text>
           </Box>
         </Box>
 
@@ -31,12 +32,9 @@ export default function Dashboard() {
               <CircularProgress color="primary" size={28} />
             </Box>
           ) : (
-            cuidadores.map((cuidador) => (
-              <CardCuidador key={cuidador.id} cuidador={cuidador} />
-            ))
+            cuidadores.map((cuidador) => <CardCuidador key={cuidador.id} cuidador={cuidador} />)
           )}
         </Box>
-
       </Container>
     </Box>
   );

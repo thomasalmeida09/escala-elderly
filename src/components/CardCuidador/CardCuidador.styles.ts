@@ -18,15 +18,16 @@ export const styles = {
     },
   } as SxProps<Theme>,
 
-  badge: (isFaltou: boolean) => ({
-    bgcolor: isFaltou ? 'warning.light' : 'primary.light',
-    color: isFaltou ? 'warning.main' : 'primary.main',
-    px: 1.5,
-    py: 0.5,
-    borderRadius: '6px',
-    fontWeight: 700,
-    fontSize: '11px',
-    fontFamily: '"JetBrains Mono", monospace',
-    textTransform: 'uppercase',
-  }) as SxProps<Theme>,
+  badge: (isFaltou: boolean) =>
+    ({
+      bgcolor: isFaltou ? 'warning.light' : 'primary.light',
+      color: isFaltou ? 'warning.main' : 'primary.main',
+      px: 1.5,
+      py: 0.5,
+      borderRadius: '6px',
+      fontWeight: 700,
+      fontSize: '11px',
+      fontFamily: '"JetBrains Mono", monospace',
+      textTransform: 'uppercase',
+    }) as SxProps<Theme>,
 };

@@ -6,7 +6,7 @@ export const styles = {
     p: '20px',
     mb: 4,
     borderRadius: '8px',
-    boxShadow: '0px 4px 20px rgba(45, 49, 46, 0.03)', 
+    boxShadow: '0px 4px 20px rgba(45, 49, 46, 0.03)',
     border: '1px solid',
     borderColor: 'divider',
     display: 'flex',
