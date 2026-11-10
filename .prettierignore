@@ -4,5 +4,3 @@ dist-ssr/
 coverage/
 bun.lock
 package-lock.json
-.github/
-docs/

@@ -2,13 +2,15 @@
 
 > **Projeto:** Escala Elderly — Painel do Gerente & Gestão Inteligente de Escalas  
 > **Repositório:** [`escala-elderly`](https://github.com/thomasalmeida09/escala-elderly) (Frontend SPA)  
-> **Última Atualização:** 24 de Outubro de 2026  
+> **Última Atualização:** 10 de Novembro de 2026
 
 Este documento registra as **Decisões Arquiteturais (ADRs)** do **Frontend**, divididas em **2 Grupos**:
+
 1. **Grupo 1 — Decisões Já Tomadas no Projeto (V1.0):** O que já foi implementado no repositório inicial, **o porquê (motivação)** e os **trade-offs (vantagens vs. custos/dívidas técnicas)**.
-2. **Grupo 2 — Decisões de Governança, Processos e Evolução (Kickoff do Time):** Como gerenciamos tarefas, padrão de formatação de código, Continuous Integration (CI), Pull Requests (PRs) e escopo das Sprints.
+2. **Grupo 2 — Decisões de Governança, Processos e Evolução (Kickoff do Time):** Como gerenciamos tarefas, padrão de formatação de código, Continuous Integration (CI), suíte automatizada de testes, Pull Requests (PRs) e escopo das Sprints.
 
 ### 🖼️ Visualização Interativa das ADRs no PR Lens
+
 - 🏗️ **[Canvas Arquitetura Completa & ADRs (4 Diagramas + Walkthrough)](https://prlens.dev/c/L-2rShWu_j0WpKt-jT0Cog)**
 - 👶 **[Canvas ELI5 — Como o Escala Elderly Resolve uma Falta (Onboarding Visual)](https://prlens.dev/c/x2StISYcAmXvy49MhetrsQ)**
 
@@ -21,6 +23,7 @@ Este documento registra as **Decisões Arquiteturais (ADRs)** do **Frontend**, d
 ---
 
 ### 📌 ADR-FE-001: Arquitetura de Repositórios Separados (SPA Frontend Desacoplada da API REST)
+
 - **Status:** `ACEITA / IMPLEMENTADA`
 - **Contexto:** O sistema precisa de uma interface rica para o gestor da clínica de idosos e de uma API backend em Java.
 - **Decisão:** Manter o Frontend em um repositório próprio (`escala-elderly`), comunicando-se via HTTP/JSON com o repositório `escala-elderly-backend`.
@@ -28,35 +31,38 @@ Este documento registra as **Decisões Arquiteturais (ADRs)** do **Frontend**, d
   - Permite que os desenvolvedores de Frontend rodem e testem a interface imediatamente com `bun run dev`, sem precisar subir o servidor Java/Gradle para validar layout e interações de tela.
 - **Trade-offs (Vantagens vs. Custos Assumidos):**
   - ✅ **Vantagens:** Ciclo de desenvolvimento visual ultrarrápido; zero acoplamento de build entre Node/Bun e Gradle/JVM.
-  - ⚠️ **Custos / Cuidados:** Exige manter o **Contrato JSON (`interface Cuidador`)** sincronizado manualmente com a classe `Cuidador.java` do Backend para evitar divergências de IDs e nomes de campos.
+  - ⚠️ **Custos / Cuidados:** Exige manter o **Contrato JSON (`interface Cuidador`)** sincronizado com a classe `Cuidador.java` do Backend para evitar divergências de IDs e nomes de campos.
 
 ---
 
-### 📌 ADR-FE-002: Stack Tecnológica — React 19 + TypeScript 6 + Vite 8 + Bun
+### 📌 ADR-FE-002: Stack Tecnológica — React 19 + TypeScript 6 + Vite 8 + Vitest 5 + Bun
+
 - **Status:** `ACEITA / IMPLEMENTADA`
-- **Onde está no código:** [`package.json`](../../package.json), [`vite.config.ts`](../../vite.config.ts), [`tsconfig.app.json`](../../tsconfig.app.json) e [`bun.lock`](../../bun.lock).
-- **Decisão:** Utilizar **React 19** com **TypeScript estrito**, empacotado pelo **Vite 8** e gerenciado pelo **Bun**.
+- **Onde está no código:** [`package.json`](../../package.json), [`vite.config.ts`](../../vite.config.ts), [`vitest.config.ts`](../../vitest.config.ts), [`tsconfig.json`](../../tsconfig.json), [`tsconfig.app.json`](../../tsconfig.app.json), [`tsconfig.node.json`](../../tsconfig.node.json), [`tsconfig.test.json`](../../tsconfig.test.json) e [`bun.lock`](../../bun.lock).
+- **Decisão:** Utilizar **React 19** com **TypeScript 6 estrito** (referências ortogonais separando browser puro em `tsconfig.app.json` e testes em `tsconfig.test.json`), empacotado pelo **Vite 8**, testado com **Vitest 5** e gerenciado pelo **Bun 1.4+**.
 - **Por quê (Motivação):**
-  - O Vite entrega *Hot Module Replacement (HMR)* instantâneo; o TypeScript previne erros de propriedades nulas ou tipos incorretos em tempo de compilação (`tsc -b`); e o Bun instala dependências em frações de segundo.
+  - O Vite entrega _Hot Module Replacement (HMR)_ instantâneo; o TypeScript previne erros de propriedades nulas ou tipos incorretos em tempo de compilação (`tsc -b`); o Vitest 5 executa _Fitness Functions_ e testes unitários em milissegundos sem inflar o bundle de produção; e o Bun instala dependências de forma determinística (`--frozen-lockfile`).
 - **Trade-offs (Vantagens vs. Custos Assumidos):**
-  - ✅ **Vantagens:** Produtividade máxima, bundle enxuto e tipagem forte nos componentes e hooks.
-  - ⚠️ **Custos / Cuidados:** Toda a equipe deve utilizar `bun install` (evitando misturar `package-lock.json` do npm com o `bun.lock`).
+  - ✅ **Vantagens:** Produtividade máxima, bundle enxuto, suíte subcutânea rápida e tipagem forte isolada entre navegador e Node.
+  - ⚠️ **Custos / Cuidados:** Toda a equipe deve utilizar `bun install` mantendo `bun.lock` como lockfile único (`.gitignore` e `ci.yml` bloqueiam `package-lock.json`, `yarn.lock` e `pnpm-lock.yaml`).
 
 ---
 
 ### 📌 ADR-FE-003: Design System Baseado em Material UI (`@mui/material`) com Tema `"Warm Care + Tech Industrial"` e Arquivos `.styles.ts`
+
 - **Status:** `ACEITA / IMPLEMENTADA`
 - **Onde está no código:** [`src/theme/theme.ts`](../../src/theme/theme.ts), [`src/App.tsx`](../../src/App.tsx), [`src/pages/Dashboard.styles.ts`](../../src/pages/Dashboard.styles.ts) e [`src/components/CardCuidador/CardCuidador.styles.ts`](../../src/components/CardCuidador/CardCuidador.styles.ts).
 - **Decisão:** Adotar o **Material UI v9 (`@mui/material` + Emotion)** como biblioteca única de componentes e estilização, isolando os objetos de estilo (`sx`) em arquivos `.styles.ts` dedicados e aplicando a paleta customizada `warmCareTheme` (`#F9F8F6` Off-White, `#007A78` Verde Esmeralda e `#D97706` Âmbar de Alerta).
 - **Por quê (Motivação):**
-  - Transmitir acolhimento hospitalar (*Warm Care*) combinado com precisão de painel de monitoramento (*Tech Industrial* com fonte monoespaçada `JetBrains Mono`), mantendo os arquivos `.tsx` limpos de blocos extensos de CSS.
+  - Transmitir acolhimento hospitalar (_Warm Care_) combinado com precisão de painel de monitoramento (_Tech Industrial_ com fonte monoespaçada `JetBrains Mono`), mantendo os arquivos `.tsx` limpos de blocos extensos de CSS.
 - **Trade-offs (Vantagens vs. Custos Assumidos):**
   - ✅ **Vantagens:** Identidade visual autoral, fácil manutenção de cores via tokens do `theme.ts` e componentes `.tsx` curtos e legíveis.
-  - ⚠️ **Dívida Técnica Mapeada (Resolvida na Issue #1):** Inicialmente o `tailwindcss` foi adicionado ao `package.json`, porém ficou inativo (`postcss.config.js` vazio). Para evitar mistura de dois sistemas de estilo concorrentes, oficializamos **100% Material UI (`.styles.ts`)** e removemos os arquivos inativos do Tailwind e o CSS residual do template Vite.
+  - ⚠️ **Dívida Técnica Resolvida na Issue #1:** Os arquivos e pacotes inativos do Tailwind (`tailwind.config.js`, `postcss.config.js`) e o CSS residual do template Vite foram integralmente removidos, consolidando **100% Material UI (`.styles.ts`)** + fundação `@media print` A4 limpa em `src/index.css`.
 
 ---
 
 ### 📌 ADR-FE-004: Desacoplamento de Estado e Lógica via Custom Hooks (`useCaregivers`)
+
 - **Status:** `ACEITA / IMPLEMENTADA`
 - **Onde está no código:** [`src/hooks/useCaregivers.ts`](../../src/hooks/useCaregivers.ts) e [`src/pages/Dashboard.tsx`](../../src/pages/Dashboard.tsx).
 - **Decisão:** Extrair todo o gerenciamento de estado (`cuidadores`, `loading`) e mutações de negócio (`simularFaltaDoCarlos`) para dentro de Custom Hooks em `src/hooks/`, deixando os componentes em `src/pages/` e `src/components/` focados apenas em apresentação.
@@ -64,11 +70,12 @@ Este documento registra as **Decisões Arquiteturais (ADRs)** do **Frontend**, d
   - Permite trocar a fonte de dados (do mock `Caregive.json` para `localStorage` + API Spring Boot) alterando apenas o hook `useCaregivers.ts`, sem quebrar nenhum componente visual.
 - **Trade-offs (Vantagens vs. Custos Assumidos):**
   - ✅ **Vantagens:** Código modular, fácil de testar e com responsabilidade única clara.
-  - ⚠️ **Custos / Cuidados:** Na versão V1.0 o estado vive apenas em memória (`useState`), perdendo alterações no `F5` — o que será evoluído na **Issue #2** com persistência *Local-First*.
+  - ⚠️ **Custos / Cuidados:** Na versão V1.0 o estado vive apenas em memória (`useState`), perdendo alterações no `F5` — o que será evoluído na **Issue #2** com persistência _Local-First_.
 
 ---
 
 ### 📌 ADR-FE-005: Abordagem "Bottom-Up" Focada na Simulação Visual do Furo de Escala
+
 - **Status:** `ACEITA / IMPLEMENTADA`
 - **Onde está no código:** [`src/components/SimuladorPainel/SimuladorPainel.tsx`](../../src/components/SimuladorPainel/SimuladorPainel.tsx) e [`src/components/CardCuidador/CardCuidador.tsx`](../../src/components/CardCuidador/CardCuidador.tsx).
 - **Decisão:** Começar o produto diretamente pelo **Painel de Monitoramento do Gerente** e pela simulação em 1 clique da **"Falta de Carlos"**, sem exigir telas prévias de login ou cadastros extensos.
@@ -80,15 +87,17 @@ Este documento registra as **Decisões Arquiteturais (ADRs)** do **Frontend**, d
 
 ---
 
-## 📙 GRUPO 2: Decisões de Governança e Evolução do Frontend (`STATUS: DEFINIDAS PARA INÍCIO DAS SPRINTS`)
+## 📙 GRUPO 2: Decisões de Governança e Evolução do Frontend (`STATUS: ATIVAS NAS SPRINTS`)
 
 ---
 
 ### 🗳️ ADR-FE-006: Escopo do Frontend Dividido em 3 Sprints Evolutivas
-- **Pergunta:** *"Qual o escopo do projeto no Frontend?"*
+
+- **Status:** `ACEITA / IMPLEMENTADA`
+- **Pergunta:** _"Qual o escopo do projeto no Frontend?"_
 - **Decisão:** Dividir a construção em **3 ondas incrementais** para garantir entregas rápidas e sem conflito de código entre os membros do time:
   1. **🟢 Sprint 1 (`sprint-1: fundacao` — Issues [#1](https://github.com/thomasalmeida09/escala-elderly/issues/1), [#2](https://github.com/thomasalmeida09/escala-elderly/issues/2) e [#9](https://github.com/thomasalmeida09/escala-elderly/issues/9)):**
-     - Limpeza do CSS residual do Vite, importação das fontes `Inter` e `JetBrains Mono`, correção do typo `"DASHBOARD"`, configuração do Prettier/CI e conexão do `useCaregivers.ts` com a API Spring Boot + persistência **Local-First (`localStorage`)**.
+     - Limpeza do CSS residual do Vite, importação das fontes `Inter` e `JetBrains Mono`, correção do typo `"DASHBOARD"`, configuração do Prettier/Vitest/CI e conexão do `useCaregivers.ts` com a API Spring Boot + persistência **Local-First (`localStorage`)**.
   2. **🔵 Sprint 2 (`sprint-2: mvp-core` — Issues [#3](https://github.com/thomasalmeida09/escala-elderly/issues/3), [#4](https://github.com/thomasalmeida09/escala-elderly/issues/4) e [#7](https://github.com/thomasalmeida09/escala-elderly/issues/7)):**
      - **Cobertura Inteligente de Falta (#7):** Sugerir quem pode cobrir o turno (folguistas com descanso $\ge 11\text{h}$ CLT) + botão de acionamento rápido via WhatsApp (`wa.me`);
      - **Importação/Exportação de Planilha CSV (#3):** Preenchimento da escala em 1 segundo e backup Local-First;
@@ -99,51 +108,73 @@ Este documento registra as **Decisões Arquiteturais (ADRs)** do **Frontend**, d
 ---
 
 ### 🗳️ ADR-FE-007: Gestão de Tarefas via GitHub Issues + GitHub Projects (Kanban Unificado)
-- **Pergunta:** *"Como vamos gerenciar as tarefas?"*
+
+- **Status:** `ACEITA / IMPLEMENTADA`
+- **Pergunta:** _"Como vamos gerenciar as tarefas?"_
 - **Decisão:** Utilizar **GitHub Issues** conectadas a um quadro único no **GitHub Projects** integrando Frontend e Backend, estruturado em 5 colunas:
   - `📋 Backlog (Sprint 2 & 3)` $\rightarrow$ `🎯 Sprint 1 (To Do)` $\rightarrow$ `🔨 In Progress` $\rightarrow$ `👀 In Review (PR)` $\rightarrow$ `✅ Done`
 - **Regra Operacional:** Nenhuma funcionalidade é codada sem uma Issue associada e atribuída (`Assignee`) ao desenvolvedor responsável.
 
 ---
 
-### 🗳️ ADR-FE-008: Padrão de Formatação de Código e Linting no Frontend
-- **Pergunta:** *"Qual o padrão de formatação do código?"*
+### 🗳️ ADR-FE-008: Padrão de Formatação de Código, Fim de Linha `LF` e Linting no Frontend
+
+- **Status:** `ACEITA / IMPLEMENTADA`
+- **Onde está no código:** [`.prettierrc`](../../.prettierrc), [`.prettierignore`](../../.prettierignore), [`.editorconfig`](../../.editorconfig), [`.gitattributes`](../../.gitattributes) e [`eslint.config.js`](../../eslint.config.js).
+- **Pergunta:** _"Qual o padrão de formatação do código?"_
 - **Decisão:**
-  1. **Linter:** Manter o **ESLint 10 (`eslint.config.js`)** validando regras de React Hooks, React Refresh e TypeScript.
-  2. **Formatador Automático:** Adotar **Prettier** (`.prettierrc`) com:
+  1. **Linter:** Manter o **ESLint 10 (`eslint.config.js`)** validando regras de React Hooks, React Refresh e TypeScript em `src/`, `tests/` e arquivos `*.config.ts`.
+  2. **Formatador Automático (100% do Repositório):** Adotar **Prettier 3.9+** (`bun run format` e `bun run format:check`) cobrindo código, `.github/` e `docs/` com:
      - `singleQuote: true`, `semi: true`, `tabWidth: 2`, `trailingComma: "es5"`, `printWidth: 100`.
-  3. **EditorConfig (`.editorconfig`):** Padronizar `charset = utf-8` e `end_of_line = lf` para evitar conflitos de quebra de linha entre Windows (`CRLF`) e Linux/Mac (`LF`).
+  3. **Higiene `UTF-8` sem BOM & `LF` (`.editorconfig` + `.gitattributes`):** Padronizar `charset = utf-8` (zero BOM `0xEF 0xBB 0xBF`) e `* text=auto eol=lf` para eliminar conflitos entre Windows (`CRLF`) e Linux/macOS (`LF`).
   4. **Convenção de Pastas e Nomes:**
      - Componentes em `PascalCase` com estilos isolados (`NomeComponente.tsx` + `NomeComponente.styles.ts`);
      - Hooks em `camelCase` iniciados por `use` (`useCaregivers.ts`);
-     - Módulos puros de negócio em `src/core/` ou `src/services/`.
+     - Módulos puros de negócio em `src/core/` ou `src/services/` e suítes automatizadas em `tests/` ou `src/**/*.test.ts`.
 
 ---
 
-### 🗳️ ADR-FE-009: Continuous Integration (CI) no Frontend com GitHub Actions
-- **Pergunta:** *"Como vai funcionar o Continuous Integration?"*
-- **Decisão:** Executar automaticamente o workflow `.github/workflows/ci.yml` em todo `push` e `pull_request` para a branch `main`, rodando:
-  1. `bun install --frozen-lockfile`
-  2. `bun run lint` (verifica erros de código/ESLint)
-  3. `bun run build` (`tsc -b && vite build` — garante que o TypeScript compila sem erros e gera o bundle de produção).
-- **Trade-off:** Bloqueia automaticamente o merge de qualquer PR que quebre a compilação ou a tipagem do projeto.
+### 🗳️ ADR-FE-009: Continuous Integration (CI) Dual-Job Endurecida com GitHub Actions & Vitest 5
+
+- **Status:** `ACEITA / IMPLEMENTADA`
+- **Onde está no código:** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`vitest.config.ts`](../../vitest.config.ts) e [`tests/governanceHygiene.test.ts`](../../tests/governanceHygiene.test.ts).
+- **Pergunta:** _"Como vai funcionar o Continuous Integration?"_
+- **Decisão:** Executar automaticamente o workflow Dual-Job `.github/workflows/ci.yml` em todo `push` e `pull_request` para a branch `main` sobre **`ubuntu-24.04`**, com `permissions: contents: read`, `LC_ALL: C.UTF-8` e Actions Node 24 fixadas por **SHA criptográfico de 40 caracteres** (`actions/checkout` v7.0.1 e `oven-sh/setup-bun` v2.2.0 com `bun-version: '1.4.4'`):
+  1. **Job 1 — `Build, Typecheck, Lint & Bundle Budget Gate` (`frontend-ci`):**
+     - _Zero-Bloat & Single-Lockfile Gate_ (rejeita `lodash`, `moment`, `axios`, `classnames`, `uuid` e lockfiles concorrentes);
+     - _Broken-Windows Static Audit_ (rejeita `debugger;` e blocos `catch {}` vazios em `src/` e `tests/`);
+     - `bun install --frozen-lockfile`;
+     - `bun run format:check` (Prettier com diagnóstico didático);
+     - `bun run lint` (ESLint 10);
+     - `bun run test` (**Vitest 5** executando _Fitness Functions_ de governança e suítes unitárias);
+     - `bun run build` (`tsc -b && vite build`);
+     - _Bundle Budget Gate_ (`gzip -n -9 -c`: máximo de `160 KiB` por chunk JS, `260 KiB` JS agregado e `25 KiB` CSS agregado).
+  2. **Job 2 — `Secret, Credential & LGPD Clean-Room Hygiene Gate` (`clean-room-security`):**
+     - Gate binário POSIX Anti-BOM (`0xEF 0xBB 0xBF`) e Anti-CRLF (`100% LF`);
+     - Bloqueio de arquivos `.env`, chaves privadas, tokens e variáveis `VITE_*_SECRET/PASSWORD` em `src/`, `public/` e `tests/`;
+     - Bloqueio Clean-Room / LGPD contra PDFs de referência embarcados, CPFs/CNPJs e e-mails fora de domínios reservados RFC 2606 (`@example.com`).
+- **Trade-off:** Bloqueia deterministicamente merges com desvios de formatação, regressões de contrato, explosão de bundle ou vazamento de PII/segredos em menos de 45 segundos.
 
 ---
 
-### 🗳️ ADR-FE-010: Governança de Branches, Commits e Pull Requests (PRs)
-- **Pergunta:** *"Como vão ser os PRs?"*
+### 🗳️ ADR-FE-010: Governança de Branches, Commits, CODEOWNERS e Pull Requests (PRs)
+
+- **Status:** `ACEITA / IMPLEMENTADA`
+- **Onde está no código:** [`.github/pull_request_template.md`](../../.github/pull_request_template.md), [`.github/CODEOWNERS`](../../.github/CODEOWNERS) e [`.github/ruleset-main-protection.json`](../../.github/ruleset-main-protection.json).
+- **Pergunta:** _"Como vão ser os PRs?"_
 - **Decisão:**
-  1. **Branch `main` Protegida:** Proibido `push` direto na `main`. Toda entrega é feita via branch curta (`feat/issue-02-local-first`, `fix/issue-01-css-vite`).
-  2. **Conventional Commits:** Mensagens padronizadas com prefixo semântico (`feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `ci:`).
-  3. **Regras de Merge do PR:**
-     - PR focado em **1 única Issue** (referenciada com `Closes #Número` na descrição);
-     - **CI Verde** no GitHub Actions;
-     - **Pelo menos 1 aprovação (Code Review)** de outro integrante da equipe;
-     - Estratégia **Squash and Merge**.
+  1. **Branch `main` Protegida por Ruleset:** Proibido `push` direto e `force-push` na `main`; exigência de histórico linear (`required_linear_history`) e aprovação dos 2 _status checks_ obrigatórios do `ci.yml`.
+  2. **Conventional Commits & _Fowler's Two Hats_:** Mensagens padronizadas (`feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `ci:`, `test:`) separando refatorações estruturais/formatação de mudanças comportamentais.
+  3. **Regras de Revisão e Merge do PR:**
+     - PR focado em **1 única Issue** (`Closes #Número`) preenchido segundo `.github/pull_request_template.md`;
+     - Roteamento automático de revisão via `.github/CODEOWNERS` (incluindo `/.github/`, `/docs/adr/`, `/src/theme/`, `/src/hooks/` e `/tests/`);
+     - **CI 100% Verde** + **1 Code Review aprovado** com resolução de threads antes do **Squash and Merge**.
 
 ---
 
 ### 🗳️ ADR-FE-011: Arquitetura Local-First com Sincronização Resiliente e Contrato JSON Unificado
+
+- **Status:** `ACEITA — IMPLEMENTAÇÃO NA ISSUE #2 (SPRINT 1)`
 - **Decisão:**
   - O Frontend sempre salva e lê instantaneamente do armazenamento local do navegador (`localStorage` / `IndexedDB`) e sincroniza com a API Spring Boot (`http://localhost:8080/api/cuidadores`) quando disponível.
   - **Contrato JSON Canônico compartilhado com o Backend:**
@@ -151,11 +182,11 @@ Este documento registra as **Decisões Arquiteturais (ADRs)** do **Frontend**, d
     export type StatusCuidador = 'Presente' | 'Faltou' | 'Folga' | 'Cobertura';
 
     export interface Cuidador {
-      id: number;          // Ex: 3 = Carlos Rocha (unificado no Front e no Back)
+      id: number; // Ex: 3 = Carlos Rocha (unificado no Front e no Back)
       nome: string;
       status: StatusCuidador;
-      turno?: string;      // Ex: "Diurno (07h-19h)" | "Noturno (19h-07h)"
-      quarto?: string;     // Ex: "Quarto 03"
+      turno?: string; // Ex: "Diurno (07h-19h)" | "Noturno (19h-07h)"
+      quarto?: string; // Ex: "Quarto 03"
       telefone?: string;
     }
     ```
