@@ -26,9 +26,7 @@ export function useCaregivers() {
 
   const simularFaltaDoCarlos = () => {
     setCuidadores((prev) =>
-      prev.map((cuidador) =>
-        cuidador.id === 3 ? { ...cuidador, status: 'Faltou' } : cuidador
-      )
+      prev.map((cuidador) => (cuidador.id === 3 ? { ...cuidador, status: 'Faltou' } : cuidador))
     );
   };
 

@@ -7,10 +7,17 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies & Build Output
 node_modules
 dist
 dist-ssr
+coverage
 *.local
+
+# Enforce single canonical lockfile (bun.lock — ADR-FE-002)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 
 # Environment variables & Secrets (Clean-Room Security Gate)
 .env

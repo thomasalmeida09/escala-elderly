@@ -12,11 +12,7 @@ export default function SimuladorPainel({ onSimulate }: SimuladorPainelProps) {
       <Text variant="caption" sx={styles.panelLabel}>
         SIMULAR ALERTA
       </Text>
-      <Button 
-        variant="contained" 
-        onClick={onSimulate}
-        sx={styles.simulateButton}
-      >
+      <Button variant="contained" onClick={onSimulate} sx={styles.simulateButton}>
         Falta de Carlos
       </Button>
     </Box>

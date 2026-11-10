@@ -25,12 +25,12 @@ export default function Text({ children, variant = 'body1', sx, ...props }: Typo
   };
 
   return (
-    <MuiTypography 
-      variant={variant} 
-      sx={{ 
+    <MuiTypography
+      variant={variant}
+      sx={{
         ...getTypographyStyles(),
-        ...sx 
-      }} 
+        ...sx,
+      }}
       {...props}
     >
       {children}

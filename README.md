@@ -4,7 +4,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6?logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-8.1-646CFF?logo=vite&logoColor=white)
 ![MUI](https://img.shields.io/badge/Material_UI-v9_Warm_Care-007A78?logo=mui&logoColor=white)
-![Status](https://img.shields.io/badge/Status-Sprint_1_(Fundação)-success)
+![Status](<https://img.shields.io/badge/Status-Sprint_1_(Fundação)-success>)
 
 Sistema web de monitoramento e gestão inteligente de escalas de cuidadores para **Instituições de Longa Permanência para Idosos (ILPIs)**, clínicas geriátricas e operações de **Home Care**.
 
@@ -12,20 +12,20 @@ Sistema web de monitoramento e gestão inteligente de escalas de cuidadores para
 
 ## 🧭 Links Rápidos de Governança & Gestão da Equipe
 
-| Recurso de Governança | Acesso Direto | Descrição |
-| :--- | :--- | :--- |
-| 📊 **Quadro Kanban Interativo** | **[GitHub Projects (Front + Back)](https://github.com/users/augustoheiss/projects/1)** | Quadro unificado com o status em tempo real de todas as tarefas da equipe |
-| 🖼️ **Mapa Visual da Arquitetura (PR Lens)** | **[Canvas Técnico & ADRs (`prlens.dev`)](https://prlens.dev/c/L-2rShWu_j0WpKt-jT0Cog)** | Diagramas animados de arquitetura, *blast radius* das Sprints e payloads JSON |
-| 👶 **Explicação Passo a Passo (ELI5 Canvas)** | **[Walkthrough Onboarding (`prlens.dev`)](https://prlens.dev/c/x2StISYcAmXvy49MhetrsQ)** | Tour visual progressivo de como o sistema resolve uma falta no plantão |
-| 🏛️ **Catálogo de ADRs do Frontend** | **[`docs/adr/README.md`](./docs/adr/README.md)** | Decisões arquiteturais já tomadas (porquê e *trade-offs*) e decisões de governança |
-| 🗺️ **Divisão por Sprints e Colunas** | **[`docs/adr/QUADRO-KANBAN-SPRINTS.md`](./docs/adr/QUADRO-KANBAN-SPRINTS.md)** | Mapa completo das 14 Issues distribuídas entre as Sprints 1, 2 e 3 |
-| ☕ **Repositório Backend (API Java)** | **[`escala-elderly-backend`](https://github.com/thomasalmeida09/escala-elderly-backend)** | API REST em Java 17 + Spring Boot 4.1 que alimenta este painel |
+| Recurso de Governança                         | Acesso Direto                                                                             | Descrição                                                                          |
+| :-------------------------------------------- | :---------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------- |
+| 📊 **Quadro Kanban Interativo**               | **[GitHub Projects (Front + Back)](https://github.com/users/augustoheiss/projects/1)**    | Quadro unificado com o status em tempo real de todas as tarefas da equipe          |
+| 🖼️ **Mapa Visual da Arquitetura (PR Lens)**   | **[Canvas Técnico & ADRs (`prlens.dev`)](https://prlens.dev/c/L-2rShWu_j0WpKt-jT0Cog)**   | Diagramas animados de arquitetura, _blast radius_ das Sprints e payloads JSON      |
+| 👶 **Explicação Passo a Passo (ELI5 Canvas)** | **[Walkthrough Onboarding (`prlens.dev`)](https://prlens.dev/c/x2StISYcAmXvy49MhetrsQ)**  | Tour visual progressivo de como o sistema resolve uma falta no plantão             |
+| 🏛️ **Catálogo de ADRs do Frontend**           | **[`docs/adr/README.md`](./docs/adr/README.md)**                                          | Decisões arquiteturais já tomadas (porquê e _trade-offs_) e decisões de governança |
+| 🗺️ **Divisão por Sprints e Colunas**          | **[`docs/adr/QUADRO-KANBAN-SPRINTS.md`](./docs/adr/QUADRO-KANBAN-SPRINTS.md)**            | Mapa completo das 14 Issues distribuídas entre as Sprints 1, 2 e 3                 |
+| ☕ **Repositório Backend (API Java)**         | **[`escala-elderly-backend`](https://github.com/thomasalmeida09/escala-elderly-backend)** | API REST em Java 17 + Spring Boot 4.1 que alimenta este painel                     |
 
 ### 🎬 Diagrama Interativo da Arquitetura (PR Lens)
 
 [![Arquitetura Escala Elderly — PR Lens](https://prlens.dev/c/L-2rShWu_j0WpKt-jT0Cog.svg)](https://prlens.dev/c/L-2rShWu_j0WpKt-jT0Cog)
 
-> 💡 *Clique no diagrama acima para abrir o **[Canvas Interativo no PR Lens](https://prlens.dev/c/L-2rShWu_j0WpKt-jT0Cog)** (ou acesse o **[Tour Visual ELI5 para Onboarding](https://prlens.dev/c/x2StISYcAmXvy49MhetrsQ)**).*
+> 💡 _Clique no diagrama acima para abrir o **[Canvas Interativo no PR Lens](https://prlens.dev/c/L-2rShWu_j0WpKt-jT0Cog)** (ou acesse o **[Tour Visual ELI5 para Onboarding](https://prlens.dev/c/x2StISYcAmXvy49MhetrsQ)**)._
 
 ---
 
@@ -34,6 +34,7 @@ Sistema web de monitoramento e gestão inteligente de escalas de cuidadores para
 Na rotina de clínicas de repouso e Home Care, **furos de escala de última hora** (como a falta imprevista de um cuidador na troca de plantão) geram desorganização operacional em grupos de WhatsApp e custos elevados com plantonistas de emergência.
 
 O **Escala Elderly** substitui o controle em papel por um **Painel do Gerente** intuitivo, construído sob a estética **"Warm Care + Tech Industrial"**:
+
 - **Visibilidade Instantânea:** Identificação imediata de quem está `PRESENTE` (Verde Esmeralda `#007A78`) e quem `FALTOU` (Alerta Âmbar `#D97706`).
 - **Simulação e Gestão de Alertas:** Painel rápido para registrar ausências e acionar a cobertura de plantão.
 - **Arquitetura Resiliente (Local-First + REST API):** Projetado para operar com resposta instantânea no navegador sincronizado à API Spring Boot.
@@ -75,6 +76,7 @@ escala-elderly/
 ## 🚀 Como Executar o Projeto Localmente
 
 ### Pré-requisitos
+
 - [Bun](https://bun.sh/) (recomendado, pois o projeto utiliza `bun.lock`) ou [Node.js 20+](https://nodejs.org/).
 
 ### Passo a passo
@@ -99,5 +101,5 @@ A aplicação estará disponível em **`http://localhost:5173`**.
 
 1. **Gestão de Tarefas:** Escolha uma Issue na coluna `🎯 Sprint 1 (To Do - Fundação)` do [GitHub Projects](https://github.com/users/augustoheiss/projects/1) e atribua seu usuário (`Assignee`).
 2. **Padrão de Branches:** Crie uma branch a partir da `main` seguindo o padrão `feat/issue-XX-descricao` ou `fix/issue-XX-descricao`.
-3. **Padrão de Commits:** Utilize *Conventional Commits* (`feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `ci:`).
-4. **Pull Requests (PRs):** Abra um PR referenciando a Issue (`Closes #XX`), aguarde a validação do **GitHub Actions (CI)** e solicite **1 Code Review** de um colega antes do *Squash and Merge*.
+3. **Padrão de Commits:** Utilize _Conventional Commits_ (`feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `ci:`).
+4. **Pull Requests (PRs):** Abra um PR referenciando a Issue (`Closes #XX`), aguarde a validação do **GitHub Actions (CI)** e solicite **1 Code Review** de um colega antes do _Squash and Merge_.
