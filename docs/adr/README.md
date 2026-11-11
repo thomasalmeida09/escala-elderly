@@ -64,13 +64,13 @@ Este documento registra as **Decisões Arquiteturais (ADRs)** do **Frontend**, d
 ### 📌 ADR-FE-004: Desacoplamento de Estado e Lógica via Custom Hooks (`useCaregivers`)
 
 - **Status:** `ACEITA / IMPLEMENTADA`
-- **Onde está no código:** [`src/hooks/useCaregivers.ts`](../../src/hooks/useCaregivers.ts) e [`src/pages/Dashboard.tsx`](../../src/pages/Dashboard.tsx).
-- **Decisão:** Extrair todo o gerenciamento de estado (`cuidadores`, `loading`) e mutações de negócio (`simularFaltaDoCarlos`) para dentro de Custom Hooks em `src/hooks/`, deixando os componentes em `src/pages/` e `src/components/` focados apenas em apresentação.
+- **Onde está no código:** [`src/hooks/useCaregivers.ts`](../../src/hooks/useCaregivers.ts), [`src/services/caregiverSyncController.ts`](../../src/services/caregiverSyncController.ts) e [`src/pages/Dashboard.tsx`](../../src/pages/Dashboard.tsx).
+- **Decisão:** Extrair todo o gerenciamento de estado (`cuidadores`, `connectionStatus`, `pendingRemoteSync`) e mutações de negócio (`simularFaltaDoCarlos`, `alternarStatusCuidador`, `restaurarEscala`) para dentro de Custom Hooks em `src/hooks/` apoiados por serviços puros em `src/services/`, deixando os componentes em `src/pages/` e `src/components/` focados apenas em apresentação acessível.
 - **Por quê (Motivação):**
-  - Permite trocar a fonte de dados (do mock `Caregive.json` para `localStorage` + API Spring Boot) alterando apenas o hook `useCaregivers.ts`, sem quebrar nenhum componente visual.
+  - Permite sincronizar instantaneamente o armazenamento _Local-First_ (`localStorage`) com a API Spring Boot via `useSyncExternalStore` em `useCaregivers.ts`, sem acoplar lógica de rede ou persistência aos componentes visuais.
 - **Trade-offs (Vantagens vs. Custos Assumidos):**
-  - ✅ **Vantagens:** Código modular, fácil de testar e com responsabilidade única clara.
-  - ⚠️ **Custos / Cuidados:** Na versão V1.0 o estado vive apenas em memória (`useState`), perdendo alterações no `F5` — o que será evoluído na **Issue #2** com persistência _Local-First_.
+  - ✅ **Vantagens:** Código modular, fácil de testar em `environment: 'node'` e com responsabilidade única clara.
+  - ✅ **Evolução Implementada na Issue #2:** O estado agora hidrata sincronicamente em `0ms` a partir de `escala_elderly:schedule:v1` (`ADR-FE-011`), sobrevivendo ao `F5` com reconciliação resiliente contra a API REST.
 
 ---
 
@@ -174,19 +174,23 @@ Este documento registra as **Decisões Arquiteturais (ADRs)** do **Frontend**, d
 
 ### 🗳️ ADR-FE-011: Arquitetura Local-First com Sincronização Resiliente e Contrato JSON Unificado
 
-- **Status:** `ACEITA — IMPLEMENTAÇÃO NA ISSUE #2 (SPRINT 1)`
+- **Status:** `ACEITA / IMPLEMENTADA`
+- **Onde está no código:** [`src/types/caregiver.ts`](../../src/types/caregiver.ts), [`src/services/localFirstStore.ts`](../../src/services/localFirstStore.ts), [`src/services/caregiverApi.ts`](../../src/services/caregiverApi.ts), [`src/services/caregiverSyncController.ts`](../../src/services/caregiverSyncController.ts), [`src/hooks/useCaregivers.ts`](../../src/hooks/useCaregivers.ts), [`tests/localFirstSync.test.ts`](../../tests/localFirstSync.test.ts) e [`tests/dashboardUiContract.test.tsx`](../../tests/dashboardUiContract.test.tsx).
 - **Decisão:**
-  - O Frontend sempre salva e lê instantaneamente do armazenamento local do navegador (`localStorage` / `IndexedDB`) e sincroniza com a API Spring Boot (`http://localhost:8080/api/cuidadores`) quando disponível.
-  - **Contrato JSON Canônico compartilhado com o Backend:**
+  - O Frontend hidrata sincronicamente em `0ms` e grava imediatamente no envelope versionado `escala_elderly:schedule:v1` (`{ schemaVersion: 1, updatedAtIso, pendingRemoteSync, cuidadores }`), purgando automaticamente snapshots corrompidos (_Versioned Schema Purge Guard_) e degradando para memória volátil se o navegador bloquear `localStorage`.
+  - Sincroniza de forma resiliente com a API Spring Boot (`VITE_API_BASE_URL`, padrão `http://localhost:8080`) usando `fetch` nativo com timeout determinístico de `2.500ms`, proteção de corrida via `AbortController` + contador monotônico de revisão, reconciliação anti-_clobbering_ (`POST /api/cuidadores/batch` sempre que houver alterações locais pendentes ou auto-cura em `404`), mutação unitária (`PATCH /api/cuidadores/{id}/status`) e restauração (`POST /api/cuidadores/reset`).
+  - **Contrato JSON Canônico de 8 campos compartilhado 1:1 com o Backend (zero chaves `null`):**
     ```ts
     export type StatusCuidador = 'Presente' | 'Faltou' | 'Folga' | 'Cobertura';
 
     export interface Cuidador {
-      id: number; // Ex: 3 = Carlos Rocha (unificado no Front e no Back)
-      nome: string;
-      status: StatusCuidador;
-      turno?: string; // Ex: "Diurno (07h-19h)" | "Noturno (19h-07h)"
-      quarto?: string; // Ex: "Quarto 03"
-      telefone?: string;
+      readonly id: number; // Ex: 3 = Carlos Rocha (unificado no Front e no Back)
+      readonly nome: string;
+      readonly status: StatusCuidador;
+      readonly turno?: string; // Ex: "Diurno (07h-19h)" | "Noturno (19h-07h)"
+      readonly quarto?: string; // Ex: "Quarto 03"
+      readonly telefone?: string;
+      readonly horasDescanso?: number;
+      readonly substituto?: string; // Omitido sempre que status !== 'Cobertura'
     }
     ```
