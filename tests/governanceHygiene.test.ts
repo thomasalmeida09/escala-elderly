@@ -187,7 +187,7 @@ describe('Governance, Supply-Chain & Clean-Room Architectural Fitness Suite', ()
     }
   });
 
-  it('3. enforces strict ADR-FE-001..012 referential integrity across PR template, README, and CODEOWNERS', () => {
+  it('3. enforces strict ADR-FE-001..013 referential integrity across PR template, README, and CODEOWNERS', () => {
     const adrCatalog = readRepoFile('docs/adr/README.md');
     const prTemplate = readRepoFile('.github/pull_request_template.md');
     const readme = readRepoFile('README.md');
@@ -207,6 +207,7 @@ describe('Governance, Supply-Chain & Clean-Room Architectural Fitness Suite', ()
       'ADR-FE-010',
       'ADR-FE-011',
       'ADR-FE-012',
+      'ADR-FE-013',
     ]);
     const catalogSet = new Set(catalogHeadings);
 
@@ -381,6 +382,18 @@ describe('Governance, Supply-Chain & Clean-Room Architectural Fitness Suite', ()
     const violations: string[] = [];
     for (const file of auditedFiles) {
       const rel = path.relative(repoRoot, file);
+      const rawBytes = fs.readFileSync(file);
+      if (
+        rawBytes.length >= 3 &&
+        rawBytes[0] === 0xef &&
+        rawBytes[1] === 0xbb &&
+        rawBytes[2] === 0xbf
+      ) {
+        violations.push(`${rel}: UTF-8 BOM (0xEF 0xBB 0xBF) forbidden in tracked repository files`);
+      }
+      if (rawBytes.includes(0x0d)) {
+        violations.push(`${rel}: CRLF / CR byte (0x0D) forbidden in tracked repository files`);
+      }
       if (file.toLowerCase().endsWith('.pdf')) {
         violations.push(`${rel}: bundled PDF binary forbidden`);
         continue;
