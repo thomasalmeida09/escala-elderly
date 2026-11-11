@@ -56,6 +56,8 @@ interface CaregiverSeedRow {
   id: number;
   nome: string;
   status: string;
+  turno?: string;
+  quarto?: string;
 }
 
 function extractCiJobNames(ciYaml: string): string[] {
@@ -228,21 +230,20 @@ describe('Governance, Supply-Chain & Clean-Room Architectural Fitness Suite', ()
       }
     }
 
-    for (const implementedAdr of catalogHeadings.slice(0, 10)) {
+    for (const implementedAdr of catalogHeadings) {
       const sectionRegex = new RegExp(
         `### .*?${implementedAdr}:[\\s\\S]*?- \\*\\*Status:\\*\\* \`ACEITA / IMPLEMENTADA\``
       );
       expect(adrCatalog).toMatch(sectionRegex);
     }
-    expect(adrCatalog).toMatch(
-      /### .*?ADR-FE-011:[\s\S]*?- \*\*Status:\*\* `ACEITA — IMPLEMENTAÇÃO NA ISSUE #2 \(SPRINT 1\)`/
-    );
 
     for (const protectedPath of [
       '/.github/',
       '/docs/adr/',
       '/src/theme/',
       '/src/hooks/',
+      '/src/services/',
+      '/src/types/',
       '/tests/',
     ]) {
       expect(codeowners).toContain(protectedPath);
@@ -279,6 +280,19 @@ describe('Governance, Supply-Chain & Clean-Room Architectural Fitness Suite', ()
       expect(
         documentedSet.has(rootFile),
         `Root file "${rootFile}" is missing from the README.md architecture tree`
+      ).toBe(true);
+    }
+
+    const trackedSubtreeFiles = [
+      ...walkRepoFiles(path.join(repoRoot, 'src')),
+      ...walkRepoFiles(path.join(repoRoot, 'tests')),
+      ...walkRepoFiles(path.join(repoRoot, 'public')),
+    ];
+    for (const absFile of trackedSubtreeFiles) {
+      const posixRel = path.relative(repoRoot, absFile).split(path.sep).join('/');
+      expect(
+        documentedSet.has(posixRel),
+        `Repository file "${posixRel}" is missing from the README.md architecture tree`
       ).toBe(true);
     }
 
@@ -388,6 +402,8 @@ describe('Governance, Supply-Chain & Clean-Room Architectural Fitness Suite', ()
       seenIds.add(row.id);
       expect(row.nome.trim().length).toBeGreaterThan(0);
       expect(allowedStatuses.has(row.status)).toBe(true);
+      expect(typeof row.turno === 'string' && row.turno.trim().length > 0).toBe(true);
+      expect(typeof row.quarto === 'string' && row.quarto.trim().length > 0).toBe(true);
     }
 
     const carlos = seed.find((c) => c.id === 3);

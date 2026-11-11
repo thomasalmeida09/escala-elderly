@@ -36,9 +36,9 @@ Na rotina de clínicas de repouso e Home Care, **furos de escala de última hora
 
 O **Escala Elderly** substitui o controle em papel por um **Painel do Gerente** intuitivo, construído sob a estética **"Warm Care + Tech Industrial"**:
 
-- **Visibilidade Instantânea:** Identificação imediata de quem está `PRESENTE` (Verde Esmeralda `#007A78`) e quem `FALTOU` (Alerta Âmbar `#D97706`).
-- **Simulação e Gestão de Alertas:** Painel rápido para registrar ausências e acionar a cobertura de plantão.
-- **Arquitetura Resiliente (Local-First + REST API):** Projetado para operar com resposta instantânea no navegador sincronizado à API Spring Boot.
+- **Visibilidade Instantânea (`0ms`):** Identificação imediata e acessível (WCAG 2.2 AA) de quem está `PRESENTE` (`#005C5A` / `#E6F2F2`), `FALTOU` (`#92400E` / `#FEF3C7`), em `FOLGA` (`#374151` / `#F3F4F6`) ou em `COBERTURA` (`#1E40AF` / `#DBEAFE`).
+- **Simulação, Alternância por Teclado e Restauração:** Painel rápido para simular `"Falta de Carlos"`, alternar status diretamente nos cards (`Enter`/`Space`/clique) e restaurar a escala padrão (`"Restaurar Escala"`).
+- **Arquitetura Resiliente (Local-First + REST API):** Hidratação síncrona em `0ms` via `localStorage` (`escala_elderly:schedule:v1`) sincronizada automaticamente aos endpoints `GET`, `PATCH`, `POST /batch` e `POST /reset` da API Spring Boot com fallback offline transparente (`MODO LOCAL-FIRST`).
 
 ---
 
@@ -77,13 +77,21 @@ escala-elderly/
 │   ├── pages/
 │   │   ├── Dashboard.tsx                        # Tela principal do Painel do Gerente
 │   │   └── Dashboard.styles.ts                  # Estilos isolados do Dashboard
+│   ├── services/
+│   │   ├── caregiverApi.ts                      # Cliente HTTP nativo (fetch + timeout 2.5s + AbortController)
+│   │   ├── caregiverSyncController.ts           # Máquina de sincronização híbrida Local-First <-> Spring Boot
+│   │   └── localFirstStore.ts                   # Persistência síncrona 0ms (escala_elderly:schedule:v1)
 │   ├── theme/
 │   │   └── theme.ts                             # Tokens visuais do tema "warmCareTheme" (MUI)
+│   ├── types/
+│   │   └── caregiver.ts                         # Contrato canônico de 8 campos e validação estrita (ADR-FE-011)
 │   ├── App.tsx                                  # Provedor global de tema e CssBaseline
 │   ├── index.css                                # Reset limpo de viewport e fundação @media print A4
 │   └── main.tsx                                 # Ponto de entrada da aplicação React 19
 ├── tests/
-│   └── governanceHygiene.test.ts                # Fitness Functions de CI, ADRs, Árvore e Clean-Room/LGPD
+│   ├── dashboardUiContract.test.tsx             # Suíte SSR de semântica HTML5, WCAG 2.2 AA e StrictMode
+│   ├── governanceHygiene.test.ts                # Fitness Functions de CI, ADRs, Árvore e Clean-Room/LGPD
+│   └── localFirstSync.test.ts                   # Suíte unitária de contrato, Local-First Store e concorrência API
 ├── .editorconfig                                # Padrão UTF-8 sem BOM e quebras de linha LF
 ├── .gitattributes                               # Normalização determinística de LF no Git
 ├── .gitignore                                   # Exclusão de artefatos de build, .env e lockfiles externos
@@ -130,6 +138,11 @@ bun run build
 ```
 
 A aplicação estará disponível em **`http://localhost:5173`**.
+
+### Integração Full-Stack (`Local-First` + API Spring Boot)
+
+- Por padrão, o Frontend conecta-se automaticamente a **`http://localhost:8080`** (`GET /api/cuidadores`, `PATCH /api/cuidadores/{id}/status`, `POST /api/cuidadores/batch` e `POST /api/cuidadores/reset`), configurável via variável pública `VITE_API_BASE_URL` (`ADR-FE-011`).
+- Caso o servidor Spring Boot esteja desligado ou inacessível (timeout `2.500ms`), o cabeçalho exibe `● MODO LOCAL-FIRST (SALVO NO DISPOSITIVO)` e todas as mudanças permanecem salvas instantaneamente no navegador, sincronizando automaticamente quando a API voltar a ficar disponível.
 
 ---
 
