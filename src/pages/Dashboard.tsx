@@ -1,5 +1,6 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Box, Container } from '@mui/material';
+import BarraPlanilha from '../components/BarraPlanilha/BarraPlanilha';
 import CardCuidador from '../components/CardCuidador/CardCuidador';
 import PainelCobertura from '../components/PainelCobertura/PainelCobertura';
 import SimuladorPainel from '../components/SimuladorPainel/SimuladorPainel';
@@ -16,12 +17,16 @@ export default function Dashboard({ controllerOptions }: DashboardProps = {}) {
   const {
     cuidadores,
     connectionStatus,
+    canUndoImport,
     simularFaltaDoCarlos,
     alternarStatusCuidador,
     confirmarCobertura,
+    importarEscala,
+    desfazerImportacao,
     restaurarEscala,
   } = useCaregivers(controllerOptions);
 
+  const [resetBannerEpoch, setResetBannerEpoch] = useState(0);
   const cardButtonRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
 
   const handleConfirmCoverage = useCallback(
@@ -36,6 +41,11 @@ export default function Dashboard({ controllerOptions }: DashboardProps = {}) {
     },
     [confirmarCobertura]
   );
+
+  const handleResetSchedule = useCallback(() => {
+    setResetBannerEpoch((prev) => prev + 1);
+    restaurarEscala();
+  }, [restaurarEscala]);
 
   const badgeToken = CONNECTION_BADGE_TOKENS[connectionStatus];
 
@@ -65,7 +75,16 @@ export default function Dashboard({ controllerOptions }: DashboardProps = {}) {
         </Box>
 
         {/* Simulador e Restauração da Escala */}
-        <SimuladorPainel onSimulate={simularFaltaDoCarlos} onReset={restaurarEscala} />
+        <SimuladorPainel onSimulate={simularFaltaDoCarlos} onReset={handleResetSchedule} />
+
+        {/* Importação / Exportação Rápida CSV/Excel e Backup Local-First */}
+        <BarraPlanilha
+          key={resetBannerEpoch}
+          cuidadores={cuidadores}
+          canUndoImport={canUndoImport}
+          onImportSchedule={importarEscala}
+          onUndoImport={desfazerImportacao}
+        />
 
         {/* Lista de Cards com Hidratação Local-First 0ms e Triagem CLT Irmã */}
         <Box sx={styles.cardsContainer}>
