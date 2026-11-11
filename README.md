@@ -65,6 +65,9 @@ escala-elderly/
 │   └── favicon.svg                              # Ícone vetorial da aplicação
 ├── src/
 │   ├── components/
+│   │   ├── BarraIndicadores/
+│   │   │   ├── BarraIndicadores.tsx             # Faixa executiva .no-print de KPIs e termômetro linear 0..100%
+│   │   │   └── BarraIndicadores.styles.ts       # Tokens WCAG 2.2 AA, números tabulares e orçamento mobile <=118px
 │   │   ├── BarraPlanilha/
 │   │   │   ├── BarraPlanilha.tsx                # Barra .no-print de planilha CSV, Undo e Estúdio PDF A4
 │   │   │   └── BarraPlanilha.styles.ts          # Tokens WCAG 2.2 AA e grade 2x2 responsiva de planilha/PDF
