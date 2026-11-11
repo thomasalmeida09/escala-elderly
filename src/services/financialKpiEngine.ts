@@ -313,10 +313,10 @@ export function buildOperationalKpiPresentation(
     presentesSubLabel = 'Postos vazios';
     presentesCardTone = 'alert';
   } else if (kpis.coberturasCount > 0) {
-    presentesSubLabel = `${kpis.presentesCount} tit. + ${kpis.coberturasCount} cob.`;
+    presentesSubLabel = `${kpis.presentesCount} tit + ${kpis.coberturasCount} cob`;
     presentesCardTone = 'covered';
   } else if (kpis.folgasCount > 0) {
-    presentesSubLabel = `${kpis.presentesCount} tit. • ${kpis.folgasCount} folga`;
+    presentesSubLabel = `${kpis.presentesCount} tit • ${kpis.folgasCount} folga`;
     presentesCardTone = 'optimal';
   } else {
     presentesSubLabel = `${kpis.presentesCount} ${kpis.presentesCount === 1 ? 'titular' : 'titulares'}`;
@@ -344,7 +344,7 @@ export function buildOperationalKpiPresentation(
     economiaSubLabel = 'Valores ocultos';
     economiaCardTone = 'neutral';
   } else if (kpis.openGapsCount > 0) {
-    economiaSubLabel = `Risco: ${formatCentavosToBrl(kpis.avoidableEmergencyExposureCentavos)}`;
+    economiaSubLabel = `Risco ${formatCentavosToBrl(kpis.avoidableEmergencyExposureCentavos)}`;
     economiaCardTone = 'warning';
   } else if (kpis.coberturasCount > 0) {
     economiaSubLabel = `${kpis.coberturasCount} cob. interna${kpis.coberturasCount === 1 ? '' : 's'}`;
@@ -379,13 +379,17 @@ export function buildOperationalKpiPresentation(
     case 'alert': {
       const faltaLabel =
         kpis.openGapsCount === 1 ? '1 falta pendente' : `${kpis.openGapsCount} faltas pendentes`;
+      const faltaCurta = kpis.openGapsCount === 1 ? '1 falta' : `${kpis.openGapsCount} faltas`;
       if (privacyMode) {
-        statusMessage = `${faltaLabel} — acione reserva elegível abaixo`;
+        statusMessage = `${faltaCurta} — acione reserva elegível abaixo`;
         progressbarAriaValueText = `${kpis.coverageRatePct}% dos postos assistidos (${kpis.activePostsCount} ativos, ${faltaLabel}; valores financeiros ocultos)`;
       } else {
-        const exposureFormatted = formatCentavosToBrl(kpis.avoidableEmergencyExposureCentavos);
-        statusMessage = `${faltaLabel} — acione reserva (evita +${exposureFormatted} urg.)`;
-        progressbarAriaValueText = `${kpis.coverageRatePct}% dos postos assistidos (${kpis.activePostsCount} ativos, ${faltaLabel}; exposição emergencial evitável de ${exposureFormatted})`;
+        const exposureSigned = formatCentavosToBrl(kpis.avoidableEmergencyExposureCentavos, {
+          showPlusSign: true,
+        });
+        const exposurePlain = formatCentavosToBrl(kpis.avoidableEmergencyExposureCentavos);
+        statusMessage = `${faltaCurta} — acione reserva (evita ${exposureSigned} urg.)`;
+        progressbarAriaValueText = `${kpis.coverageRatePct}% dos postos assistidos (${kpis.activePostsCount} ativos, ${faltaLabel}; exposição emergencial evitável de ${exposurePlain})`;
       }
       break;
     }
@@ -403,7 +407,7 @@ export function buildOperationalKpiPresentation(
       break;
     }
     case 'optimal': {
-      statusMessage = '100% dos postos assistidos • Escala nominal sem sobrecusto';
+      statusMessage = '100% assistido • Escala nominal sem sobrecusto';
       progressbarAriaValueText = `100% dos postos assistidos (${kpis.presentesCount} ${kpis.presentesCount === 1 ? 'titular ativo' : 'titulares ativos'} sem sobrecusto)`;
       break;
     }

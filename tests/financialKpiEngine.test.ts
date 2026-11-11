@@ -90,7 +90,7 @@ describe('FE #8 — Operational & Financial KPI Engine (Integer Centavos, Anti-S
     expect(kpis.thermometerTone).toBe('optimal');
 
     const view = buildOperationalKpiPresentation(kpis);
-    expect(view.presentesCard.subLabel).toBe('4 tit. • 2 folga');
+    expect(view.presentesCard.subLabel).toBe('4 tit • 2 folga');
   });
 
   it('3. handles empty roster [] and 100%-Folga roster safely without NaN or division by zero (S02)', () => {
@@ -136,9 +136,9 @@ describe('FE #8 — Operational & Financial KPI Engine (Integer Centavos, Anti-S
     expect(alertView.presentesCard.valueText).toBe('3 Ativos');
     expect(alertView.faltasCard.valueText).toBe('1 Pendente');
     expect(alertView.economiaCard.valueText).toBe('R$ 0,00');
-    expect(alertView.economiaCard.subLabel).toBe('Risco: R$ 125,00');
+    expect(alertView.economiaCard.subLabel).toBe('Risco R$ 125,00');
     expect(alertView.thermometerSymbol).toBe('▲');
-    expect(alertView.statusMessage).toContain('evita +R$ 125,00 urg.');
+    expect(alertView.statusMessage).toBe('1 falta — acione reserva (evita +R$ 125,00 urg.)');
 
     const withBeatrizCovered = withCarlosAbsent.map((c) =>
       c.id === 3 ? applyStatusChange(c, 'Cobertura', 'Beatriz Alves') : c
@@ -155,12 +155,12 @@ describe('FE #8 — Operational & Financial KPI Engine (Integer Centavos, Anti-S
 
     const coveredView = buildOperationalKpiPresentation(coveredKpis);
     expect(coveredView.presentesCard.valueText).toBe('4 Ativos');
-    expect(coveredView.presentesCard.subLabel).toBe('3 tit. + 1 cob.');
+    expect(coveredView.presentesCard.subLabel).toBe('3 tit + 1 cob');
     expect(coveredView.faltasCard.valueText).toBe('0 Pendentes');
     expect(coveredView.economiaCard.valueText).toBe('+R$ 125,00');
     expect(coveredView.economiaCard.subLabel).toBe('1 cob. interna');
     expect(coveredView.thermometerSymbol).toBe('◆');
-    expect(coveredView.statusMessage).toContain('+R$ 125,00 economizados');
+    expect(coveredView.statusMessage).toBe('100% assistido • +R$ 125,00 economizados c/ reserva');
   });
 
   it('5. preserves realizedSavingsCentavos (+R$ 125,00) alongside open emergency exposure when Cobertura and Faltou coexist (M1.2 / S06)', () => {
@@ -182,7 +182,7 @@ describe('FE #8 — Operational & Financial KPI Engine (Integer Centavos, Anti-S
 
     const mixedView = buildOperationalKpiPresentation(mixedKpis);
     expect(mixedView.economiaCard.valueText).toBe('+R$ 125,00');
-    expect(mixedView.economiaCard.subLabel).toBe('Risco: R$ 125,00');
+    expect(mixedView.economiaCard.subLabel).toBe('Risco R$ 125,00');
     expect(mixedView.economiaCard.tone).toBe('warning');
   });
 
@@ -340,5 +340,45 @@ describe('FE #8 — Operational & Financial KPI Engine (Integer Centavos, Anti-S
         kpis.totalRosterCount
       );
     }
+  });
+
+  it('10. enforces mobile micro-copy character budgets (BLK-01/BLK-02/IMP-04) and zero-spread sign discipline without +R$ 0,00 (IMP-05)', () => {
+    const seed = getCanonicalSeed();
+    const alertRoster = seed.map((c) => (c.id === 3 ? applyStatusChange(c, 'Faltou') : c));
+    const coveredRoster = seed.map((c) =>
+      c.id === 3 ? applyStatusChange(c, 'Cobertura', 'Beatriz Alves') : c
+    );
+
+    // Zero-spread custom cost model must delegate sign formatting to formatCentavosToBrl (never "+R$ 0,00")
+    const zeroSpreadKpis = computeOperationalFinancialKpis(alertRoster, {
+      plannedShiftCentavos: 19_000,
+      emergencyBenchmarkCentavos: 19_000,
+    });
+    expect(zeroSpreadKpis.avoidableEmergencyExposureCentavos).toBe(0);
+    const zeroSpreadView = buildOperationalKpiPresentation(zeroSpreadKpis);
+    expect(zeroSpreadView.statusMessage).toBe('1 falta — acione reserva (evita R$ 0,00 urg.)');
+    expect(zeroSpreadView.statusMessage).not.toContain('+R$ 0,00');
+
+    // Canonical mobile micro-copy character budget (375x667 1-line statusRow <= 54 chars & compact subLabels <= 16 chars)
+    for (const roster of [[], seed, alertRoster, coveredRoster] as const) {
+      for (const privacyMode of [false, true] as const) {
+        const view = buildOperationalKpiPresentation(computeOperationalFinancialKpis(roster), {
+          privacyMode,
+        });
+        expect(view.statusMessage.length).toBeLessThanOrEqual(52);
+        expect(view.presentesCard.subLabel.length).toBeLessThanOrEqual(16);
+        expect(view.faltasCard.subLabel.length).toBeLessThanOrEqual(16);
+        expect(view.economiaCard.subLabel.length).toBeLessThanOrEqual(16);
+      }
+    }
+
+    // Thousands scale (10 open gaps -> R$ 1.250,00) fits cleanly in <= 17 proportional chars
+    const tenGapsRoster = Array.from({ length: 10 }, (_, idx) => buildCaregiver(idx + 1, 'Faltou'));
+    const tenGapsView = buildOperationalKpiPresentation(
+      computeOperationalFinancialKpis(tenGapsRoster)
+    );
+    expect(tenGapsView.economiaCard.subLabel).toBe('Risco R$ 1.250,00');
+    expect(tenGapsView.economiaCard.subLabel.length).toBeLessThanOrEqual(17);
+    expect(tenGapsView.statusMessage.length).toBeLessThanOrEqual(54);
   });
 });

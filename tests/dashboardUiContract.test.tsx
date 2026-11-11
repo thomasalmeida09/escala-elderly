@@ -794,12 +794,29 @@ describe('FE #2 & FE #7 — Dashboard, CardCuidador & PainelCobertura SSR Semant
     expect(mixedHtml).toContain('aria-valuetext="75% dos postos assistidos');
     expect(mixedHtml).toContain('aria-label="Resumo operacional do turno"');
 
-    // Mixed-state accounting truth (M1.2 / S06): preserves +R$ 125,00 realized savings AND surfaces Risco: R$ 125,00
+    // Mixed-state accounting truth (M1.2 / S06): preserves +R$ 125,00 realized savings AND surfaces Risco R$ 125,00
     expect(mixedHtml).toContain('3 Ativos');
-    expect(mixedHtml).toContain('2 tit. + 1 cob.');
+    expect(mixedHtml).toContain('2 tit + 1 cob');
     expect(mixedHtml).toContain('1 Pendente');
     expect(mixedHtml).toContain('+R$ 125,00');
-    expect(mixedHtml).toContain('Risco: R$ 125,00');
+    expect(mixedHtml).toContain('Risco R$ 125,00');
+
+    // BLK-03 / IMP-04: Atomic <span style="white-space:nowrap"> wrapping on currency tokens in statusRow (both alert and covered)
+    expect(mixedHtml).toMatch(
+      /\(evita (?:<style[^>]*>[^<]*white-space:nowrap[^<]*<\/style>)?<span[^>]*>\+R\$ 125,00<\/span> urg\.\)/
+    );
+
+    const coveredOnlyRoster = getCanonicalSeed().map((item) =>
+      item.id === CARLOS_ROCHA_ID ? applyStatusChange(item, 'Cobertura', 'Beatriz Alves') : item
+    );
+    const coveredHtml = renderToStaticMarkup(
+      <ThemeProvider theme={warmCareTheme}>
+        <BarraIndicadores cuidadores={coveredOnlyRoster} />
+      </ThemeProvider>
+    );
+    expect(coveredHtml).toMatch(
+      /100% assistido • (?:<style[^>]*>[^<]*white-space:nowrap[^<]*<\/style>)?<span[^>]*>\+R\$ 125,00<\/span> economizados c\/ reserva/
+    );
 
     // Full LGPD privacyMode masking across DOM + ARIA tree (M3 / S09)
     const maskedHtml = renderToStaticMarkup(
@@ -813,12 +830,26 @@ describe('FE #2 & FE #7 — Dashboard, CardCuidador & PainelCobertura SSR Semant
     expect(maskedHtml).not.toContain('+R$');
     expect(maskedHtml).not.toMatch(/125|190|315/);
 
-    // Style invariants: tabular-nums, nowrap (never overflowWrap: anywhere on numbers), 320px 2-column fallback, reduced-motion (S12, S18)
+    // Style invariants: tabular-nums, nowrap, zero ellipsis on kpiSubLabel, proportional Inter override, 320px 2-column fallback, reduced-motion (S12, S13, S18, BLK-01..03)
     const kpiValueStyle = barraIndicadoresStyles.kpiValue as Record<string, unknown>;
     expect(kpiValueStyle.fontFamily).toContain('JetBrains Mono');
     expect(kpiValueStyle.fontVariantNumeric).toBe('tabular-nums');
     expect(kpiValueStyle.whiteSpace).toBe('nowrap');
     expect(kpiValueStyle.overflowWrap).toBeUndefined();
+
+    const kpiSubLabelStyle = barraIndicadoresStyles.kpiSubLabel as Record<string, unknown>;
+    expect(String(kpiSubLabelStyle.fontFamily)).toContain('Inter');
+    expect(kpiSubLabelStyle.fontVariantNumeric).toBe('tabular-nums');
+    expect(kpiSubLabelStyle.whiteSpace).toBe('nowrap');
+    expect(kpiSubLabelStyle.textOverflow).toBeUndefined();
+
+    const statusTextStyle = barraIndicadoresStyles.statusText('alert') as Record<string, unknown>;
+    expect(String(statusTextStyle.fontFamily)).toContain('Inter');
+    expect(statusTextStyle.fontVariantNumeric).toBe('tabular-nums');
+
+    const nowrapCurrencyStyle = barraIndicadoresStyles.nowrapCurrency as Record<string, unknown>;
+    expect(nowrapCurrencyStyle.whiteSpace).toBe('nowrap');
+    expect(nowrapCurrencyStyle.fontVariantNumeric).toBe('tabular-nums');
 
     const kpiGridStyle = barraIndicadoresStyles.kpiGrid as Record<string, unknown>;
     expect(kpiGridStyle['@media (max-width: 359.95px)']).toEqual({
