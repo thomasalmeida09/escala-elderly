@@ -1,3 +1,6 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ThemeProvider } from '@mui/material';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -8,11 +11,17 @@ import {
 } from '../src/components/BarraPlanilha/BarraPlanilha.styles';
 import CardCuidador from '../src/components/CardCuidador/CardCuidador';
 import { CARD_STATUS_TOKENS } from '../src/components/CardCuidador/CardCuidador.styles';
+import { FolhaEscalaA4Document } from '../src/components/ModalFolhaEscalaA4/ModalFolhaEscalaA4';
+import { MODAL_FOLHA_A4_TOKENS } from '../src/components/ModalFolhaEscalaA4/ModalFolhaEscalaA4.styles';
 import PainelCobertura from '../src/components/PainelCobertura/PainelCobertura';
 import { PAINEL_COBERTURA_TOKENS } from '../src/components/PainelCobertura/PainelCobertura.styles';
 import { SIMULADOR_BUTTON_TOKENS } from '../src/components/SimuladorPainel/SimuladorPainel.styles';
 import Dashboard from '../src/pages/Dashboard';
 import { CONNECTION_BADGE_TOKENS } from '../src/pages/Dashboard.styles';
+import {
+  buildA4ScheduleDocumentModel,
+  isModalDialogOpen,
+} from '../src/services/a4PdfScheduleEngine';
 import { createCaregiverApiClient } from '../src/services/caregiverApi';
 import {
   CARLOS_ROCHA_ID,
@@ -26,8 +35,12 @@ import {
   createLocalFirstStore,
   getCanonicalSeed,
 } from '../src/services/localFirstStore';
+import { synthesizeKeyboardVectorSignature } from '../src/services/vectorSignatureProtocol';
 import { warmCareTheme } from '../src/theme/theme';
 import { applyStatusChange, parseCuidador } from '../src/types/caregiver';
+
+const currentTestDir = path.dirname(fileURLToPath(import.meta.url));
+const frontendRoot = path.resolve(currentTestDir, '..');
 
 function parseHexChannel(hexPair: string): number {
   const srgb = Number.parseInt(hexPair, 16) / 255;
@@ -229,6 +242,59 @@ describe('FE #2 & FE #7 — Dashboard, CardCuidador & PainelCobertura SSR Semant
         BARRA_PLANILHA_TOKENS.dropzoneActive.bg
       )
     ).toBeGreaterThanOrEqual(3.0);
+    expect(
+      wcagContrastRatio(BARRA_PLANILHA_TOKENS.pdfButton.border, BARRA_PLANILHA_TOKENS.pdfButton.bg)
+    ).toBeGreaterThanOrEqual(3.0);
+
+    // S19: Exhaustive WCAG 2.2 AA verification across 100% of MODAL_FOLHA_A4_TOKENS (text >= 4.5:1, hover >= 4.5:1, border >= 3.0:1)
+    for (const [tokenKey, tokenValue] of Object.entries(MODAL_FOLHA_A4_TOKENS)) {
+      const baseRatio = wcagContrastRatio(tokenValue.fg, tokenValue.bg);
+      expect(
+        baseRatio,
+        `ModalFolhaEscalaA4 token "${tokenKey}" (${tokenValue.fg} on ${tokenValue.bg}) must exceed 4.5:1`
+      ).toBeGreaterThanOrEqual(4.5);
+
+      if ('hoverBg' in tokenValue) {
+        const hoverRatio = wcagContrastRatio(tokenValue.fg, tokenValue.hoverBg);
+        expect(
+          hoverRatio,
+          `ModalFolhaEscalaA4 hover token "${tokenKey}" (${tokenValue.fg} on ${tokenValue.hoverBg}) must exceed 4.5:1`
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+
+      if ('border' in tokenValue) {
+        const borderVsInner = wcagContrastRatio(tokenValue.border, tokenValue.bg);
+        const borderVsCanvas = wcagContrastRatio(tokenValue.border, '#FFFFFF');
+        const effectiveBoundaryRatio = Math.max(borderVsInner, borderVsCanvas);
+        expect(
+          effectiveBoundaryRatio,
+          `ModalFolhaEscalaA4 boundary token "${tokenKey}" (${tokenValue.border}) must exceed 3.0:1`
+        ).toBeGreaterThanOrEqual(3.0);
+      }
+    }
+
+    // Explicit WCAG 1.4.11 inner border >= 3.0:1 check on all light-surface & backdrop tokens (S19)
+    for (const lightSurfaceKey of [
+      'dialogHeader',
+      'printSecondaryButton',
+      'toggleIdle',
+      'deskBackdrop',
+      'sheetPaper',
+      'tableHeader',
+      'statusPresente',
+      'statusFolga',
+      'statusCobertura',
+      'statusFaltou',
+      'lgpdActiveBadge',
+      'signaturePad',
+      'statusBanner',
+    ] as const) {
+      const tok = MODAL_FOLHA_A4_TOKENS[lightSurfaceKey];
+      expect(
+        wcagContrastRatio(tok.border, tok.bg),
+        `Light-surface border "${lightSurfaceKey}" (${tok.border} on ${tok.bg}) must exceed 3.0:1`
+      ).toBeGreaterThanOrEqual(3.0);
+    }
 
     // FE07 Nit 1 closure: MuiButton transition never uses 'all' (prevents 200ms focus-visible outline lag)
     const buttonRootStyle = warmCareTheme.components?.MuiButton?.styleOverrides?.root as Record<
@@ -419,6 +485,7 @@ describe('FE #2 & FE #7 — Dashboard, CardCuidador & PainelCobertura SSR Semant
     expect(cleanHtml).toContain('PLANILHA &amp; BACKUP LOCAL-FIRST');
     expect(cleanHtml).toContain('Importar CSV');
     expect(cleanHtml).toContain('Exportar CSV / Backup');
+    expect(cleanHtml).toContain('Exportar PDF A4');
     expect(cleanHtml).not.toContain('Desfazer Importação');
 
     // Hidden <input type="file"> excluded from Tab order and assistive tree (M4.2)
@@ -469,14 +536,112 @@ describe('FE #2 & FE #7 — Dashboard, CardCuidador & PainelCobertura SSR Semant
     expect(hydratedUndoHtml).toContain('Fernanda Melo');
     expect(hydratedUndoHtml).toContain('Desfazer Importação');
 
-    // Decorative emojis inside BarraPlanilha buttons are aria-hidden="true" and spaced via Flexbox gap: 0.75 (WCAG 2.5.3 + Nit 1)
-    expect((barraPlanilhaStyles.importButton as Record<string, unknown>).gap).toBe(0.75);
-    expect((barraPlanilhaStyles.exportButton as Record<string, unknown>).gap).toBe(0.75);
-    expect((barraPlanilhaStyles.undoButton as Record<string, unknown>).gap).toBe(0.75);
+    // Decorative emojis inside BarraPlanilha buttons are aria-hidden="true" and spaced via Flexbox gap: 0.75,
+    // and all 4 buttons enforce flex: '1 1 136px' (2x2 mobile grid keeping Card 1 above 667px fold — M5.2)
+    for (const btnStyle of [
+      barraPlanilhaStyles.importButton,
+      barraPlanilhaStyles.exportButton,
+      barraPlanilhaStyles.pdfButton,
+      barraPlanilhaStyles.undoButton,
+    ]) {
+      const record = btnStyle as Record<string, unknown>;
+      expect(record.gap).toBe(0.75);
+      expect(record.flex).toBe('1 1 136px');
+    }
 
     const allButtons = [...hydratedUndoHtml.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/gi)];
     for (const [, inner] of allButtons) {
       expect(inner).not.toMatch(/<(button|a|input)\b/i);
     }
+  });
+
+  it('8. renders FolhaEscalaA4Document 1:1 with semantic tables, multi-page headers, LGPD mural masking, SVG sigv1 rubric, @media print CSS isolation, and [aria-modal="true"] paste/drop guard (S18, S20)', () => {
+    const signature = synthesizeKeyboardVectorSignature('Dra. Helena Prado');
+    expect(signature).not.toBeNull();
+
+    const roster35 = Array.from({ length: 35 }, (_, idx) =>
+      parseCuidador({
+        id: idx + 1,
+        nome: idx === 0 ? 'João da Conceição' : `Carlos Rocha ${idx + 1}`,
+        status: idx === 1 ? 'Cobertura' : 'Presente',
+        turno: idx % 2 === 0 ? 'Diurno (07h-19h)' : 'Noturno (19h-07h)',
+        quarto: `Quarto ${String((idx % 12) + 1).padStart(2, '0')}`,
+        telefone: `+55 11 90000-01${String((idx % 80) + 10).padStart(2, '0')}`,
+        ...(idx === 1 ? { substituto: 'Beatriz Alves' } : {}),
+      })
+    );
+
+    const lgpdMultiPageModel = buildA4ScheduleDocumentModel(roster35, {
+      orientation: 'portrait',
+      privacyMode: true,
+      emittedAtIso: '2026-11-11T03:00:00.000Z',
+      signaturePayload: signature!.serialized,
+      signerLabel: 'Dra. Helena Prado — COREN-SP 000100',
+    });
+    expect(lgpdMultiPageModel.pages).toHaveLength(2);
+
+    const sheetHtml = renderToStaticMarkup(<FolhaEscalaA4Document model={lgpdMultiPageModel} />);
+
+    // 2 <article class="a4-sheet-page"> elements with semantic <table> and repeated <thead>
+    const pageArticles = [...sheetHtml.matchAll(/<article\b[^>]*class="a4-sheet-page"[^>]*>/gi)];
+    expect(pageArticles).toHaveLength(2);
+    expect(sheetHtml).toContain('calc(297mm - 0.5px)');
+    expect(sheetHtml).not.toContain('min-height:297mm');
+
+    const tables = [...sheetHtml.matchAll(/<table\b[^>]*>/gi)];
+    const theads = [...sheetHtml.matchAll(/<thead\b[^>]*>/gi)];
+    expect(tables).toHaveLength(2);
+    expect(theads).toHaveLength(2);
+    expect(sheetHtml).toContain('Página 1/2');
+    expect(sheetHtml).toContain('Página 2/2');
+    expect(sheetHtml).toContain('FOLHA DE CONTINUAÇÃO');
+
+    // LGPD Public Mural verification: masked titular & substituto, zero phone digits
+    expect(sheetHtml).toContain('João C.');
+    expect(sheetHtml).toContain('Carlos R.');
+    expect(sheetHtml).toContain('Beatriz A.');
+    expect(sheetHtml).toContain('MODO MURAL PÚBLICO LGPD');
+    expect(sheetHtml).not.toContain('Conceição');
+    expect(sheetHtml).not.toContain('Alves');
+    expect(sheetHtml).not.toContain('90000');
+
+    // Vector SVG signature + SHA-256 integrity seal rendered on sheet
+    expect(sheetHtml).toContain('aria-label="Rubrica vetorial da coordenação"');
+    expect(sheetHtml).toContain(lgpdMultiPageModel.sha256Hex);
+
+    // S18: Verify index.css @media print isolation against MUI ModalManager overflow:hidden & Skia rasterization
+    const indexCss = fs.readFileSync(path.join(frontendRoot, 'src/index.css'), 'utf8');
+    expect(indexCss).toContain('#a4-print-sheet-host {\n  display: none !important;\n}');
+    expect(indexCss).toContain('overflow: visible !important;');
+    expect(indexCss).toContain('filter: none !important;');
+    expect(indexCss).toContain('backdrop-filter: none !important;');
+    expect(indexCss).toContain('box-shadow: none !important;');
+    expect(indexCss).toContain("body[data-a4-sheet-print='active'] > #root");
+    expect(indexCss).toContain("body[data-a4-sheet-print='active'] > #a4-print-sheet-host");
+    expect(indexCss).toContain('height: calc(297mm - 0.5px);');
+    expect(indexCss).toContain('height: calc(210mm - 0.5px);');
+    expect(indexCss).toContain('.a4-sheet-page:not(:last-child)');
+    expect(indexCss).not.toMatch(/min-height:\s*297mm/i);
+    expect(indexCss).not.toMatch(/min-height:\s*210mm/i);
+
+    // S20: Verify isModalDialogOpen() & BarraPlanilha [aria-modal="true"] suppression contract
+    expect(isModalDialogOpen(null)).toBe(false);
+    expect(
+      isModalDialogOpen({
+        querySelector: (sel: string) => (sel === '[aria-modal="true"]' ? ({} as Element) : null),
+      })
+    ).toBe(true);
+    expect(
+      isModalDialogOpen({
+        querySelector: () => null,
+      })
+    ).toBe(false);
+
+    const barraSource = fs.readFileSync(
+      path.join(frontendRoot, 'src/components/BarraPlanilha/BarraPlanilha.tsx'),
+      'utf8'
+    );
+    const modalGuardMatches = [...barraSource.matchAll(/isModalDialogOpen\(\)/g)];
+    expect(modalGuardMatches.length).toBeGreaterThanOrEqual(3);
   });
 });

@@ -285,6 +285,21 @@ export function computeOpticalSheetScale(
 }
 
 /**
+ * Detecta se existe qualquer modal acessivel `[aria-modal="true"]` aberto no DOM,
+ * permitindo que listeners globais de `window` (paste/dragover/drop) fiquem inertes (M6.2 / S20).
+ */
+export function isModalDialogOpen(
+  doc: Pick<Document, 'querySelector'> | null | undefined = typeof document !== 'undefined'
+    ? document
+    : null
+): boolean {
+  if (!doc || typeof doc.querySelector !== 'function') {
+    return false;
+  }
+  return doc.querySelector('[aria-modal="true"]') !== null;
+}
+
+/**
  * Injeta <style id="runtime-page-geometry"> com dimensoes literais em mm (zero CSS variables em @page)
  * e marca body[data-a4-sheet-print="active"], devolvendo destrutor LIFO idempotente (M2 / S18).
  */
