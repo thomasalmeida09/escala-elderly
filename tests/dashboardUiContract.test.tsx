@@ -14,7 +14,10 @@ import { CARD_STATUS_TOKENS } from '../src/components/CardCuidador/CardCuidador.
 import ModalFolhaEscalaA4, {
   FolhaEscalaA4Document,
 } from '../src/components/ModalFolhaEscalaA4/ModalFolhaEscalaA4';
-import { MODAL_FOLHA_A4_TOKENS } from '../src/components/ModalFolhaEscalaA4/ModalFolhaEscalaA4.styles';
+import {
+  MODAL_FOLHA_A4_TOKENS,
+  styles as modalFolhaA4Styles,
+} from '../src/components/ModalFolhaEscalaA4/ModalFolhaEscalaA4.styles';
 import PainelCobertura from '../src/components/PainelCobertura/PainelCobertura';
 import { PAINEL_COBERTURA_TOKENS } from '../src/components/PainelCobertura/PainelCobertura.styles';
 import { SIMULADOR_BUTTON_TOKENS } from '../src/components/SimuladorPainel/SimuladorPainel.styles';
@@ -677,5 +680,17 @@ describe('FE #2 & FE #7 — Dashboard, CardCuidador & PainelCobertura SSR Semant
     for (const [, inner] of studioButtons) {
       expect(inner).not.toMatch(/<(button|a|input|div|p)\b/i);
     }
+
+    // MAJ-03 & IMP-05: Zero background-color transition flash on toggleChipButton + 44px mobile touch targets
+    const activeChipStyle = modalFolhaA4Styles.toggleChipButton(true) as Record<string, unknown>;
+    expect(String(activeChipStyle.transition ?? '')).not.toContain('background-color');
+    expect((activeChipStyle.minHeight as { xs?: string })?.xs).toBe('44px');
+    expect(
+      (
+        (modalFolhaA4Styles.downloadPrimaryButton as Record<string, unknown>).minHeight as {
+          xs?: string;
+        }
+      )?.xs
+    ).toBe('44px');
   });
 });
