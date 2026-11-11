@@ -111,6 +111,11 @@ export const MODAL_FOLHA_A4_TOKENS = {
     bg: '#ECFDF5',
     border: '#047857',
   },
+  errorBanner: {
+    fg: '#991B1B',
+    bg: '#FEF2F2',
+    border: '#DC2626',
+  },
 } as const;
 
 export function getSheetStatusBadgeToken(status: StatusCuidador) {
@@ -135,11 +140,21 @@ export const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     flexWrap: 'wrap',
+    flexShrink: 0,
     gap: 1.25,
     px: { xs: 1.75, sm: 2.5 },
-    py: 1.5,
+    py: 1.25,
     borderBottom: `1px solid ${MODAL_FOLHA_A4_TOKENS.dialogHeader.border}`,
     bgcolor: MODAL_FOLHA_A4_TOKENS.dialogHeader.bg,
+  } as SxProps<Theme>,
+
+  scrollableStudioBody: {
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    flex: '1 1 auto',
+    minHeight: 0,
   } as SxProps<Theme>,
 
   titleGroup: {
@@ -273,14 +288,26 @@ export const styles = {
     fontWeight: 600,
   } as SxProps<Theme>,
 
+  errorBanner: {
+    bgcolor: MODAL_FOLHA_A4_TOKENS.errorBanner.bg,
+    color: MODAL_FOLHA_A4_TOKENS.errorBanner.fg,
+    border: `1px solid ${MODAL_FOLHA_A4_TOKENS.errorBanner.border}`,
+    borderRadius: '6px',
+    px: 1.25,
+    py: 0.65,
+    fontSize: '0.76rem',
+    fontWeight: 600,
+  } as SxProps<Theme>,
+
   previewDesk: {
     bgcolor: MODAL_FOLHA_A4_TOKENS.deskBackdrop.bg,
     color: MODAL_FOLHA_A4_TOKENS.deskBackdrop.fg,
     borderTop: `1px solid ${MODAL_FOLHA_A4_TOKENS.deskBackdrop.border}`,
     px: { xs: 1.25, sm: 2.5 },
     py: { xs: 1.5, sm: 2.5 },
-    overflowY: 'auto',
+    overflowY: 'visible',
     overflowX: 'hidden',
+    flex: '1 0 auto',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',

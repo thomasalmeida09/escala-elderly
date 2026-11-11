@@ -188,23 +188,38 @@ export default function BarraPlanilha({
     [processSpreadsheetFile]
   );
 
-  const handleDragEnterOrOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsDragActive(true);
-  }, []);
+  const handleDragEnterOrOver = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      if (isPdfStudioOpen || isModalDialogOpen()) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      setIsDragActive(true);
+    },
+    [isPdfStudioOpen]
+  );
 
-  const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const related = event.relatedTarget as Node | null;
-    if (!event.currentTarget.contains(related)) {
-      setIsDragActive(false);
-    }
-  }, []);
+  const handleDragLeave = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      if (isPdfStudioOpen || isModalDialogOpen()) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const related = event.relatedTarget as Node | null;
+      if (!event.currentTarget.contains(related)) {
+        setIsDragActive(false);
+      }
+    },
+    [isPdfStudioOpen]
+  );
 
   const handleDrop = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
+      if (isPdfStudioOpen || isModalDialogOpen()) {
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       setIsDragActive(false);
@@ -220,7 +235,7 @@ export default function BarraPlanilha({
         void processImportedPayload(droppedText, 'texto arrastado');
       }
     },
-    [processImportedPayload, processSpreadsheetFile]
+    [isPdfStudioOpen, processImportedPayload, processSpreadsheetFile]
   );
 
   const handleExportCsv = useCallback(() => {
@@ -300,97 +315,109 @@ export default function BarraPlanilha({
   }, [canUndoImport, onUndoImport]);
 
   return (
-    <Box
-      className="no-print"
-      role="region"
-      aria-labelledby="barra-planilha-heading"
-      onDragEnter={handleDragEnterOrOver}
-      onDragOver={handleDragEnterOrOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      sx={styles.container(isDragActive)}
-    >
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain"
-        tabIndex={-1}
-        aria-hidden="true"
-        style={{ display: 'none' }}
-        onChange={handleFileChange}
-      />
+    <>
+      <Box
+        className="no-print"
+        role="region"
+        aria-labelledby="barra-planilha-heading"
+        onDragEnter={handleDragEnterOrOver}
+        onDragOver={handleDragEnterOrOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        sx={styles.container(isDragActive)}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain"
+          tabIndex={-1}
+          aria-hidden="true"
+          style={{ display: 'none' }}
+          onChange={handleFileChange}
+        />
 
-      <Box sx={styles.headerRow}>
-        <Text id="barra-planilha-heading" variant="caption" sx={styles.sectionLabel}>
-          PLANILHA &amp; BACKUP LOCAL-FIRST
-        </Text>
-        <Box component="span" sx={styles.dropHintBadge(isDragActive)}>
-          {isDragActive
-            ? 'Solte a planilha .CSV para preencher agora'
-            : 'Arraste .CSV ou cole do Excel (Ctrl+V)'}
+        <Box sx={styles.headerRow}>
+          <Text id="barra-planilha-heading" variant="caption" sx={styles.sectionLabel}>
+            PLANILHA &amp; BACKUP LOCAL-FIRST
+          </Text>
+          <Box component="span" sx={styles.dropHintBadge(isDragActive)}>
+            {isDragActive
+              ? 'Solte a planilha .CSV para preencher agora'
+              : 'Arraste .CSV ou cole do Excel (Ctrl+V)'}
+          </Box>
         </Box>
-      </Box>
 
-      <Box sx={styles.actionsRow}>
-        <Button
-          ref={importButtonRef}
-          type="button"
-          variant="contained"
-          onClick={handleOpenFilePicker}
-          sx={styles.importButton}
-        >
-          <Box component="span" aria-hidden="true">
-            {'📥'}
-          </Box>
-          Importar CSV
-        </Button>
-
-        <Button type="button" variant="outlined" onClick={handleExportCsv} sx={styles.exportButton}>
-          <Box component="span" aria-hidden="true">
-            {'📤'}
-          </Box>
-          Exportar CSV / Backup
-        </Button>
-
-        <Button
-          ref={pdfButtonRef}
-          type="button"
-          variant="outlined"
-          onClick={handleOpenPdfStudio}
-          sx={styles.pdfButton}
-        >
-          <Box component="span" aria-hidden="true">
-            {'🖨️'}
-          </Box>
-          Exportar PDF A4
-        </Button>
-
-        {canUndoImport ? (
-          <Button type="button" variant="outlined" onClick={handleUndoClick} sx={styles.undoButton}>
+        <Box sx={styles.actionsRow}>
+          <Button
+            ref={importButtonRef}
+            type="button"
+            variant="contained"
+            onClick={handleOpenFilePicker}
+            sx={styles.importButton}
+          >
             <Box component="span" aria-hidden="true">
-              {'↩'}
+              {'📥'}
             </Box>
-            Desfazer Importação
+            Importar CSV
           </Button>
+
+          <Button
+            type="button"
+            variant="outlined"
+            onClick={handleExportCsv}
+            sx={styles.exportButton}
+          >
+            <Box component="span" aria-hidden="true">
+              {'📤'}
+            </Box>
+            Exportar CSV / Backup
+          </Button>
+
+          <Button
+            ref={pdfButtonRef}
+            type="button"
+            variant="outlined"
+            onClick={handleOpenPdfStudio}
+            sx={styles.pdfButton}
+          >
+            <Box component="span" aria-hidden="true">
+              {'🖨️'}
+            </Box>
+            Exportar PDF A4
+          </Button>
+
+          {canUndoImport ? (
+            <Button
+              type="button"
+              variant="outlined"
+              onClick={handleUndoClick}
+              sx={styles.undoButton}
+            >
+              <Box component="span" aria-hidden="true">
+                {'↩'}
+              </Box>
+              Desfazer Importação
+            </Button>
+          ) : null}
+        </Box>
+
+        {feedback !== null ? (
+          feedback.kind === 'error' ? (
+            <Box role="alert" sx={styles.feedbackBanner('error')}>
+              {feedback.message}
+            </Box>
+          ) : (
+            <Box
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              sx={styles.feedbackBanner('success')}
+            >
+              {feedback.message}
+            </Box>
+          )
         ) : null}
       </Box>
-
-      {feedback !== null ? (
-        feedback.kind === 'error' ? (
-          <Box role="alert" sx={styles.feedbackBanner('error')}>
-            {feedback.message}
-          </Box>
-        ) : (
-          <Box
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-            sx={styles.feedbackBanner('success')}
-          >
-            {feedback.message}
-          </Box>
-        )
-      ) : null}
 
       {isPdfStudioOpen ? (
         <ModalFolhaEscalaA4
@@ -399,6 +426,6 @@ export default function BarraPlanilha({
           onClose={handleClosePdfStudio}
         />
       ) : null}
-    </Box>
+    </>
   );
 }

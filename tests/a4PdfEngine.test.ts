@@ -468,6 +468,18 @@ describe('FE #4 — ISO 32000-1 Deterministic A4 Vector PDF Engine & sigv1 Signa
     expect(decodedText).not.toContain('90000');
     expect(decodedText).not.toContain('0101');
     expect(decodedText).not.toContain('0103');
+
+    // Multi-page LGPD parity: continuation pages (2..N) also emit MODO MURAL PÚBLICO LGPD badge 1:1 with SheetCanvas
+    const lgpdMultiModel = buildA4ScheduleDocumentModel(buildSyntheticRoster(35), {
+      privacyMode: true,
+      emittedAtIso: '2026-11-11T03:00:00.000Z',
+    });
+    expect(lgpdMultiModel.pages).toHaveLength(2);
+    const lgpdMultiStrings = extractAllDecodedPdfTextStrings(
+      compileSchedulePdfBytes(lgpdMultiModel)
+    );
+    const lgpdBadgeCount = lgpdMultiStrings.filter((s) => s === 'MODO MURAL PÚBLICO LGPD').length;
+    expect(lgpdBadgeCount).toBe(2);
   });
 
   it('7. validates Ramer-Douglas-Peucker sigv1 compression, < 5ms anti-DoS bounds, upright PDF yPt orientation, and exact bottom-left rectangle math (S14, S15, S16)', () => {
