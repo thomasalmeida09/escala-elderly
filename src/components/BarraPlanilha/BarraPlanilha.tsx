@@ -251,20 +251,29 @@ export default function BarraPlanilha({
   }, [cuidadores]);
 
   const handleUndoClick = useCallback(async () => {
-    const restored = await onUndoImport();
+    const focusImportButton = (): void => {
+      const target = importButtonRef.current;
+      if (target && typeof target.focus === 'function') {
+        target.focus();
+      }
+    };
+
+    const pendingUndo = onUndoImport();
+    if (canUndoImport) {
+      queueMicrotask(focusImportButton);
+    }
+
+    const restored = await pendingUndo;
     if (restored) {
       setFeedback({
         kind: 'success',
         message: 'Importação desfeita. A escala anterior foi restaurada com segurança.',
       });
     }
-    queueMicrotask(() => {
-      const target = importButtonRef.current;
-      if (target && typeof target.focus === 'function') {
-        target.focus();
-      }
-    });
-  }, [onUndoImport]);
+    if (typeof document !== 'undefined' && document.activeElement === document.body) {
+      queueMicrotask(focusImportButton);
+    }
+  }, [canUndoImport, onUndoImport]);
 
   return (
     <Box
@@ -307,14 +316,14 @@ export default function BarraPlanilha({
           sx={styles.importButton}
         >
           <Box component="span" aria-hidden="true">
-            {'📥 '}
+            {'📥'}
           </Box>
           Importar CSV
         </Button>
 
         <Button type="button" variant="outlined" onClick={handleExportCsv} sx={styles.exportButton}>
           <Box component="span" aria-hidden="true">
-            {'📤 '}
+            {'📤'}
           </Box>
           Exportar CSV / Backup
         </Button>
@@ -322,7 +331,7 @@ export default function BarraPlanilha({
         {canUndoImport ? (
           <Button type="button" variant="outlined" onClick={handleUndoClick} sx={styles.undoButton}>
             <Box component="span" aria-hidden="true">
-              {'↩ '}
+              {'↩'}
             </Box>
             Desfazer Importação
           </Button>

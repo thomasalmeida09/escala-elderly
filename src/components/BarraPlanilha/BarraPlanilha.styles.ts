@@ -131,6 +131,7 @@ export const styles = {
 
   importButton: {
     flex: '1 1 136px',
+    gap: 0.75,
     minWidth: 0,
     minHeight: '38px',
     px: 1.5,
@@ -151,6 +152,7 @@ export const styles = {
 
   exportButton: {
     flex: '1 1 150px',
+    gap: 0.75,
     minWidth: 0,
     minHeight: '38px',
     px: 1.5,
@@ -175,6 +177,7 @@ export const styles = {
 
   undoButton: {
     flex: '1 1 150px',
+    gap: 0.75,
     minWidth: 0,
     minHeight: '38px',
     px: 1.5,
