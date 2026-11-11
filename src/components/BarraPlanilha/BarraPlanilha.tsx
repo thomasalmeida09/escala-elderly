@@ -1,5 +1,6 @@
 import { type ChangeEvent, type DragEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Button } from '@mui/material';
+import { isModalDialogOpen } from '../../services/a4PdfScheduleEngine';
 import {
   CsvScheduleError,
   MAX_CSV_BYTES,
@@ -8,6 +9,7 @@ import {
   serializeScheduleToCsv,
 } from '../../services/csvScheduleCodec';
 import { ContractValidationError, type Cuidador } from '../../types/caregiver';
+import ModalFolhaEscalaA4 from '../ModalFolhaEscalaA4/ModalFolhaEscalaA4';
 import Text from '../common/Text';
 import { styles } from './BarraPlanilha.styles';
 
@@ -47,10 +49,12 @@ export default function BarraPlanilha({
   onUndoImport,
 }: BarraPlanilhaProps) {
   const [isDragActive, setIsDragActive] = useState(false);
+  const [isPdfStudioOpen, setIsPdfStudioOpen] = useState(false);
   const [feedback, setFeedback] = useState<SpreadsheetFeedbackState | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const importButtonRef = useRef<HTMLButtonElement | null>(null);
+  const pdfButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const processImportedPayload = useCallback(
     async (rawInput: string | Uint8Array, sourceDescription: string) => {
@@ -106,6 +110,7 @@ export default function BarraPlanilha({
     const handleWindowPaste = (event: ClipboardEvent): void => {
       if (
         event.defaultPrevented ||
+        isModalDialogOpen() ||
         isEditableEventTarget(event.target) ||
         (typeof document !== 'undefined' && isEditableEventTarget(document.activeElement))
       ) {
@@ -134,13 +139,16 @@ export default function BarraPlanilha({
     };
 
     const handleWindowDragOver = (event: globalThis.DragEvent): void => {
+      if (isModalDialogOpen()) {
+        return;
+      }
       if (event.dataTransfer?.types?.includes('Files')) {
         event.preventDefault();
       }
     };
 
     const handleWindowDrop = (event: globalThis.DragEvent): void => {
-      if (event.defaultPrevented) {
+      if (event.defaultPrevented || isModalDialogOpen()) {
         return;
       }
       const droppedFile = event.dataTransfer?.files?.[0];
@@ -250,6 +258,22 @@ export default function BarraPlanilha({
     }
   }, [cuidadores]);
 
+  const handleOpenPdfStudio = useCallback(() => {
+    setIsPdfStudioOpen(true);
+  }, []);
+
+  const handleClosePdfStudio = useCallback(() => {
+    setIsPdfStudioOpen(false);
+    const focusPdfTrigger = (): void => {
+      const trigger = pdfButtonRef.current;
+      if (trigger && typeof trigger.focus === 'function') {
+        trigger.focus();
+      }
+    };
+    focusPdfTrigger();
+    queueMicrotask(focusPdfTrigger);
+  }, []);
+
   const handleUndoClick = useCallback(async () => {
     const focusImportButton = (): void => {
       const target = importButtonRef.current;
@@ -328,6 +352,19 @@ export default function BarraPlanilha({
           Exportar CSV / Backup
         </Button>
 
+        <Button
+          ref={pdfButtonRef}
+          type="button"
+          variant="outlined"
+          onClick={handleOpenPdfStudio}
+          sx={styles.pdfButton}
+        >
+          <Box component="span" aria-hidden="true">
+            {'🖨️'}
+          </Box>
+          Exportar PDF A4
+        </Button>
+
         {canUndoImport ? (
           <Button type="button" variant="outlined" onClick={handleUndoClick} sx={styles.undoButton}>
             <Box component="span" aria-hidden="true">
@@ -353,6 +390,14 @@ export default function BarraPlanilha({
             {feedback.message}
           </Box>
         )
+      ) : null}
+
+      {isPdfStudioOpen ? (
+        <ModalFolhaEscalaA4
+          open={isPdfStudioOpen}
+          cuidadores={cuidadores}
+          onClose={handleClosePdfStudio}
+        />
       ) : null}
     </Box>
   );

@@ -65,11 +65,14 @@ escala-elderly/
 ├── src/
 │   ├── components/
 │   │   ├── BarraPlanilha/
-│   │   │   ├── BarraPlanilha.tsx                # Barra .no-print de importação/exportação CSV e Undo
-│   │   │   └── BarraPlanilha.styles.ts          # Tokens WCAG 2.2 AA e estilos responsivos de planilha
+│   │   │   ├── BarraPlanilha.tsx                # Barra .no-print de planilha CSV, Undo e Estúdio PDF A4
+│   │   │   └── BarraPlanilha.styles.ts          # Tokens WCAG 2.2 AA e grade 2x2 responsiva de planilha/PDF
 │   │   ├── CardCuidador/
 │   │   │   ├── CardCuidador.tsx                 # Card individual de status do cuidador
 │   │   │   └── CardCuidador.styles.ts           # Estilos isolados do CardCuidador
+│   │   ├── ModalFolhaEscalaA4/
+│   │   │   ├── ModalFolhaEscalaA4.tsx           # Estúdio SheetCanvas A4 1:1, rubrica sigv1 e portal @media print
+│   │   │   └── ModalFolhaEscalaA4.styles.ts     # Tokens WCAG 2.2 AA e estilos do estúdio A4
 │   │   ├── PainelCobertura/
 │   │   │   ├── PainelCobertura.tsx              # Painel irmão de triagem CLT (>=11h) e WhatsApp wa.me
 │   │   │   └── PainelCobertura.styles.ts        # Tokens WCAG 2.2 AA e estilos responsivos de cobertura

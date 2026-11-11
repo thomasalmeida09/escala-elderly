@@ -1,5 +1,5 @@
 /*
- * Escala Elderly — Global Viewport Reset & A4 Print Foundation
+ * Escala Elderly — Global Viewport Reset & Deterministic A4 Print Foundation
  * Design tokens, colors, and typography are governed exclusively by warmCareTheme (src/theme/theme.ts)
  * and Material UI <CssBaseline /> (ADR-FE-003).
  */
@@ -31,8 +31,12 @@ body {
   padding: 0;
 }
 
+#a4-print-sheet-host {
+  display: none !important;
+}
+
 @page {
-  size: A4;
+  size: 210mm 297mm;
   margin: 0;
 }
 
@@ -42,16 +46,64 @@ body {
   *::after {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    filter: none !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
   }
 
   html,
-  body,
+  body {
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100%;
+    min-height: 0 !important;
+    height: auto !important;
+    display: block !important;
+    background-color: #ffffff !important;
+  }
+
   #root {
     width: 100%;
     min-height: 0 !important;
     height: auto !important;
     display: block !important;
     background-color: #ffffff !important;
+  }
+
+  body[data-a4-sheet-print='active'] > #root,
+  body[data-a4-sheet-print='active'] > .MuiModal-root,
+  body[data-a4-sheet-print='active'] > [role='presentation'] {
+    display: none !important;
+  }
+
+  body[data-a4-sheet-print='active'] > #a4-print-sheet-host {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .a4-sheet-page {
+    width: 210mm;
+    height: calc(297mm - 0.5px);
+    max-height: calc(297mm - 0.5px);
+    overflow: hidden;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    background-color: #ffffff !important;
+  }
+
+  .a4-sheet-page[data-orientation='landscape'] {
+    width: 297mm;
+    height: calc(210mm - 0.5px);
+    max-height: calc(210mm - 0.5px);
+  }
+
+  .a4-sheet-page:not(:last-child) {
+    break-after: page;
+    page-break-after: always;
   }
 
   .no-print {

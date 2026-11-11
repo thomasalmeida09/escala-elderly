@@ -8,6 +8,7 @@ import type { SxProps, Theme } from '@mui/material';
  * - dropzoneActive: #005C5A / #E6F2F2 =  6.85:1 (borda #005C5A = 6.85:1)
  * - importButton:   #FFFFFF / #007A78 =  5.18:1 (hover #005C5A = 7.84:1)
  * - exportButton:   #005C5A / #FFFFFF =  7.84:1 (hover #E6F2F2 = 6.85:1)
+ * - pdfButton:      #1E293B / #FFFFFF = 14.63:1 (hover #F1F5F9 = 13.08:1, borda #64748B = 4.76:1)
  * - undoButton:     #92400E / #FEF3C7 =  6.37:1 (hover #FDE68A = 5.69:1)
  * - successBanner:  #065F46 / #ECFDF5 =  7.29:1
  * - errorBanner:    #991B1B / #FEF2F2 =  7.60:1
@@ -43,6 +44,12 @@ export const BARRA_PLANILHA_TOKENS = {
     bg: '#FFFFFF',
     hoverBg: '#E6F2F2',
     border: '#005C5A',
+  },
+  pdfButton: {
+    fg: '#1E293B',
+    bg: '#FFFFFF',
+    hoverBg: '#F1F5F9',
+    border: '#64748B',
   },
   undoButton: {
     fg: '#92400E',
@@ -151,7 +158,7 @@ export const styles = {
   } as SxProps<Theme>,
 
   exportButton: {
-    flex: '1 1 150px',
+    flex: '1 1 136px',
     gap: 0.75,
     minWidth: 0,
     minHeight: '38px',
@@ -175,8 +182,33 @@ export const styles = {
     },
   } as SxProps<Theme>,
 
+  pdfButton: {
+    flex: '1 1 136px',
+    gap: 0.75,
+    minWidth: 0,
+    minHeight: '38px',
+    px: 1.5,
+    py: 0.75,
+    fontSize: '12.5px',
+    lineHeight: 1.25,
+    whiteSpace: 'normal',
+    boxShadow: 'none',
+    bgcolor: BARRA_PLANILHA_TOKENS.pdfButton.bg,
+    color: BARRA_PLANILHA_TOKENS.pdfButton.fg,
+    borderColor: BARRA_PLANILHA_TOKENS.pdfButton.border,
+    '&:hover': {
+      bgcolor: BARRA_PLANILHA_TOKENS.pdfButton.hoverBg,
+      borderColor: BARRA_PLANILHA_TOKENS.pdfButton.border,
+      boxShadow: 'none',
+    },
+    '&:focus-visible, &.Mui-focusVisible': {
+      outline: '2px solid #005C5A',
+      outlineOffset: '2px',
+    },
+  } as SxProps<Theme>,
+
   undoButton: {
-    flex: '1 1 150px',
+    flex: '1 1 136px',
     gap: 0.75,
     minWidth: 0,
     minHeight: '38px',
