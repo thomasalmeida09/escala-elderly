@@ -74,7 +74,7 @@ export function FolhaEscalaA4Document({ model }: FolhaEscalaA4DocumentProps) {
                 backgroundColor: MODAL_FOLHA_A4_TOKENS.sheetHeaderBand.bg,
                 color: MODAL_FOLHA_A4_TOKENS.sheetHeaderBand.fg,
                 borderLeft: '2.2mm solid #007A78',
-                padding: page.isContinuation ? '2.2mm 4mm' : '2.8mm 4mm',
+                padding: page.isContinuation ? '1.8mm 4mm' : '2.8mm 4mm',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
@@ -93,10 +93,10 @@ export function FolhaEscalaA4Document({ model }: FolhaEscalaA4DocumentProps) {
                 <div style={{ minWidth: 0 }}>
                   <div
                     style={{
-                      fontSize: page.isContinuation ? '9.8pt' : '11.2pt',
+                      fontSize: page.isContinuation ? '8.8pt' : '11.2pt',
                       fontWeight: 800,
                       letterSpacing: '0.02em',
-                      lineHeight: 1.2,
+                      lineHeight: 1.18,
                     }}
                   >
                     {page.isContinuation
@@ -420,6 +420,7 @@ export interface ModalFolhaEscalaA4Props {
   readonly cuidadores: readonly Cuidador[];
   readonly onClose: () => void;
   readonly initialPrivacyMode?: boolean;
+  readonly disablePortal?: boolean;
 }
 
 const CANVAS_WIDTH = 360;
@@ -430,17 +431,19 @@ export default function ModalFolhaEscalaA4({
   cuidadores,
   onClose,
   initialPrivacyMode = false,
+  disablePortal = false,
 }: ModalFolhaEscalaA4Props) {
   const [orientation, setOrientation] = useState<PageOrientation>('portrait');
   const [privacyMode, setPrivacyMode] = useState<boolean>(initialPrivacyMode);
   const [signerLabel, setSignerLabel] = useState<string>('');
   const [signaturePayload, setSignaturePayload] = useState<string | null>(null);
   const [exportStatusMessage, setExportStatusMessage] = useState<string | null>(null);
+  const [exportErrorMessage, setExportErrorMessage] = useState<string | null>(null);
+  const [previewDeskEl, setPreviewDeskEl] = useState<HTMLDivElement | null>(null);
   const [availableWidthPx, setAvailableWidthPx] = useState<number>(() =>
-    typeof window !== 'undefined' ? Math.max(240, window.innerWidth - 64) : 794
+    typeof window !== 'undefined' ? Math.max(220, window.innerWidth - 76) : 794
   );
 
-  const previewDeskRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rawStrokesRef = useRef<SignaturePoint[][]>([]);
   const activeStrokeRef = useRef<SignaturePoint[] | null>(null);
@@ -469,29 +472,40 @@ export default function ModalFolhaEscalaA4({
     return applyRuntimePageGeometry(document, orientation);
   }, [open, orientation]);
 
-  // Medicao responsiva do container de preview para zoom optico 375x667 -> Desktop
+  // Medicao responsiva via callback-ref (compatível com Portal assincrono do MUI Dialog) para zoom optico 375x667 -> Desktop
   useEffect(() => {
-    if (!open || typeof window === 'undefined') {
+    if (!open || !previewDeskEl || typeof window === 'undefined') {
       return undefined;
     }
-    const target = previewDeskRef.current;
-    if (!target || typeof ResizeObserver === 'undefined') {
+
+    const measureImmediate = () => {
+      const style = window.getComputedStyle(previewDeskEl);
+      const padX =
+        (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0);
+      const innerWidth = Math.floor(previewDeskEl.clientWidth - padX);
+      if (innerWidth > 120) {
+        setAvailableWidthPx(innerWidth);
+      }
+    };
+    measureImmediate();
+
+    if (typeof ResizeObserver === 'undefined') {
       return undefined;
     }
 
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
-      const contentWidth = Math.floor(entry.contentRect.width - 24);
+      const contentWidth = Math.floor(entry.contentRect.width);
       if (contentWidth > 120) {
         setAvailableWidthPx(contentWidth);
       }
     });
-    observer.observe(target);
+    observer.observe(previewDeskEl);
     return () => {
       observer.disconnect();
     };
-  }, [open]);
+  }, [open, previewDeskEl]);
 
   const redrawCanvasFromModel = useCallback((sigModel: A4ScheduleDocumentModel['signature']) => {
     const canvas = canvasRef.current;
@@ -615,31 +629,41 @@ export default function ModalFolhaEscalaA4({
       return;
     }
 
-    const t0 = performance.now();
-    const pdfBytes = compileSchedulePdfBytes(documentModel);
-    const elapsedMs = (performance.now() - t0).toFixed(1);
+    try {
+      setExportErrorMessage(null);
+      const t0 = performance.now();
+      const pdfBytes = compileSchedulePdfBytes(documentModel);
+      const elapsedMs = (performance.now() - t0).toFixed(1);
 
-    const safeBuffer = new Uint8Array(pdfBytes.byteLength);
-    safeBuffer.set(pdfBytes);
-    const blob = new Blob([safeBuffer], { type: 'application/pdf' });
-    const objectUrl = URL.createObjectURL(blob);
-    const filename = buildPdfFilename(new Date(), orientation, privacyMode);
+      const safeBuffer = new Uint8Array(pdfBytes.byteLength);
+      safeBuffer.set(pdfBytes);
+      const blob = new Blob([safeBuffer], { type: 'application/pdf' });
+      const objectUrl = URL.createObjectURL(blob);
+      const filename = buildPdfFilename(new Date(), orientation, privacyMode);
 
-    const anchor = document.createElement('a');
-    anchor.href = objectUrl;
-    anchor.download = filename;
-    anchor.style.display = 'none';
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = filename;
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
 
-    setTimeout(() => {
-      URL.revokeObjectURL(objectUrl);
-    }, 150);
+      setTimeout(() => {
+        URL.revokeObjectURL(objectUrl);
+      }, 150);
 
-    setExportStatusMessage(
-      `PDF vetorial gerado (${(pdfBytes.byteLength / 1024).toFixed(1)} KiB em ${elapsedMs}ms) • Selo SHA-256: ${documentModel.sha256Hex.slice(0, 16)}...`
-    );
+      setExportStatusMessage(
+        `PDF vetorial gerado (${(pdfBytes.byteLength / 1024).toFixed(1)} KiB em ${elapsedMs}ms) • Selo SHA-256: ${documentModel.sha256Hex.slice(0, 16)}...`
+      );
+    } catch (downloadError) {
+      setExportStatusMessage(null);
+      setExportErrorMessage(
+        downloadError instanceof Error
+          ? `Falha ao gerar PDF A4 vetorial: ${downloadError.message}. Use "Imprimir para Mural" como contingência imediata.`
+          : 'Falha inesperada ao gerar PDF A4 vetorial. Use "Imprimir para Mural" como contingência imediata.'
+      );
+    }
   }, [documentModel, orientation, privacyMode]);
 
   const handlePrintSheet = useCallback(() => {
@@ -669,6 +693,7 @@ export default function ModalFolhaEscalaA4({
       <Dialog
         open={open}
         onClose={onClose}
+        disablePortal={disablePortal}
         maxWidth="lg"
         fullWidth
         aria-labelledby="modal-folha-a4-title"
@@ -725,153 +750,161 @@ export default function ModalFolhaEscalaA4({
           </Box>
         </Box>
 
-        <Box sx={styles.controlsStrip}>
-          <Box sx={styles.controlsRow}>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
-              <Button
-                type="button"
-                variant="outlined"
-                aria-pressed={orientation === 'portrait'}
-                onClick={() => setOrientation('portrait')}
-                sx={styles.toggleChipButton(orientation === 'portrait')}
-              >
-                Retrato (210×297mm)
-              </Button>
-
-              <Button
-                type="button"
-                variant="outlined"
-                aria-pressed={orientation === 'landscape'}
-                onClick={() => setOrientation('landscape')}
-                sx={styles.toggleChipButton(orientation === 'landscape')}
-              >
-                Paisagem (297×210mm)
-              </Button>
-            </Box>
-
-            <Button
-              type="button"
-              variant="outlined"
-              aria-pressed={privacyMode}
-              onClick={() => setPrivacyMode((prev) => !prev)}
-              sx={styles.toggleChipButton(privacyMode)}
-            >
-              <Box component="span" aria-hidden="true">
-                {privacyMode ? '🔒' : '🔓'}
-              </Box>
-              Modo Mural Público LGPD: {privacyMode ? 'Ativo' : 'Inativo'}
-            </Button>
-          </Box>
-
-          <Box sx={styles.signatureToolbar}>
-            <Box sx={styles.signatureCanvasWrap}>
-              <Text variant="caption" sx={{ fontWeight: 700, color: '#1E293B' }}>
-                Rubrica Manual da Coordenação (Mouse / Caneta / Toque)
-              </Text>
-              <canvas
-                ref={canvasRef}
-                width={CANVAS_WIDTH}
-                height={CANVAS_HEIGHT}
-                aria-label="Quadro de rubrica manual da coordenação (alternativa por teclado ao lado)"
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={finalizePointerStroke}
-                onPointerCancel={finalizePointerStroke}
-                style={{
-                  width: '100%',
-                  maxWidth: `${CANVAS_WIDTH}px`,
-                  height: '76px',
-                  backgroundColor: MODAL_FOLHA_A4_TOKENS.signaturePad.bg,
-                  border: `1.5px dashed ${MODAL_FOLHA_A4_TOKENS.signaturePad.border}`,
-                  borderRadius: '6px',
-                  touchAction: 'none',
-                  cursor: 'crosshair',
-                }}
-              />
-            </Box>
-
-            <Box sx={styles.keyboardSigColumn}>
-              <label
-                htmlFor="a4-signer-input"
-                style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1E293B' }}
-              >
-                Responsável / COREN (opcional — acessível por teclado)
-              </label>
-              <input
-                id="a4-signer-input"
-                type="text"
-                maxLength={80}
-                value={signerLabel}
-                onChange={handleSignerInputChange}
-                placeholder="Ex.: Dra. Helena Prado — COREN-SP 000100"
-                style={{
-                  padding: '8px 10px',
-                  borderRadius: '6px',
-                  border: `1px solid ${MODAL_FOLHA_A4_TOKENS.signaturePad.border}`,
-                  fontSize: '0.82rem',
-                  color: MODAL_FOLHA_A4_TOKENS.signaturePad.fg,
-                  backgroundColor: '#FFFFFF',
-                }}
-              />
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+        <Box sx={styles.scrollableStudioBody}>
+          <Box sx={styles.controlsStrip}>
+            <Box sx={styles.controlsRow}>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
                 <Button
                   type="button"
                   variant="outlined"
-                  onClick={handleGenerateKeyboardSignature}
-                  sx={styles.toggleChipButton(false)}
+                  aria-pressed={orientation === 'portrait'}
+                  onClick={() => setOrientation('portrait')}
+                  sx={styles.toggleChipButton(orientation === 'portrait')}
                 >
-                  Gerar Rubrica por Teclado
+                  Retrato (210×297mm)
                 </Button>
+
                 <Button
                   type="button"
                   variant="outlined"
-                  onClick={handleClearSignature}
-                  sx={styles.toggleChipButton(false)}
+                  aria-pressed={orientation === 'landscape'}
+                  onClick={() => setOrientation('landscape')}
+                  sx={styles.toggleChipButton(orientation === 'landscape')}
                 >
-                  Limpar Rubrica
+                  Paisagem (297×210mm)
                 </Button>
               </Box>
-            </Box>
-          </Box>
 
-          {exportStatusMessage !== null ? (
-            <Box role="status" aria-live="polite" aria-atomic="true" sx={styles.statusBanner}>
-              {exportStatusMessage}
-            </Box>
-          ) : null}
-        </Box>
-
-        <Box ref={previewDeskRef} sx={styles.previewDesk}>
-          {documentModel.pages.map((page) => {
-            const singlePageModel: A4ScheduleDocumentModel = {
-              ...documentModel,
-              pages: [page],
-            };
-            return (
-              <Box
-                key={page.pageNumber}
-                sx={{
-                  width: `${scaleInfo.scaledWidthPx}px`,
-                  height: `${scaleInfo.scaledHeightPx}px`,
-                  mx: 'auto',
-                  overflow: 'hidden',
-                  position: 'relative',
-                  boxShadow: '0 8px 24px rgba(15, 23, 42, 0.14)',
-                }}
+              <Button
+                type="button"
+                variant="outlined"
+                aria-pressed={privacyMode}
+                onClick={() => setPrivacyMode((prev) => !prev)}
+                sx={styles.toggleChipButton(privacyMode)}
               >
-                <Box
-                  sx={{
-                    width: `${scaleInfo.pageWidthPx}px`,
-                    height: `${scaleInfo.pageHeightPx}px`,
-                    transform: `scale(${scaleInfo.scale})`,
-                    transformOrigin: 'top left',
+                <Box component="span" aria-hidden="true">
+                  {privacyMode ? '🔒' : '🔓'}
+                </Box>
+                Modo Mural Público LGPD: {privacyMode ? 'Ativo' : 'Inativo'}
+              </Button>
+            </Box>
+
+            <Box sx={styles.signatureToolbar}>
+              <Box sx={styles.signatureCanvasWrap}>
+                <Text variant="caption" sx={{ fontWeight: 700, color: '#1E293B' }}>
+                  Rubrica Manual da Coordenação (Mouse / Caneta / Toque)
+                </Text>
+                <canvas
+                  ref={canvasRef}
+                  width={CANVAS_WIDTH}
+                  height={CANVAS_HEIGHT}
+                  aria-label="Quadro de rubrica manual da coordenação (alternativa por teclado ao lado)"
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={finalizePointerStroke}
+                  onPointerCancel={finalizePointerStroke}
+                  style={{
+                    width: '100%',
+                    maxWidth: `${CANVAS_WIDTH}px`,
+                    height: '76px',
+                    backgroundColor: MODAL_FOLHA_A4_TOKENS.signaturePad.bg,
+                    border: `1.5px dashed ${MODAL_FOLHA_A4_TOKENS.signaturePad.border}`,
+                    borderRadius: '6px',
+                    touchAction: 'none',
+                    cursor: 'crosshair',
                   }}
+                />
+              </Box>
+
+              <Box sx={styles.keyboardSigColumn}>
+                <label
+                  htmlFor="a4-signer-input"
+                  style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1E293B' }}
                 >
-                  <FolhaEscalaA4Document model={singlePageModel} />
+                  Responsável / COREN (opcional — acessível por teclado)
+                </label>
+                <input
+                  id="a4-signer-input"
+                  type="text"
+                  maxLength={80}
+                  value={signerLabel}
+                  onChange={handleSignerInputChange}
+                  placeholder="Ex.: Dra. Helena Prado — COREN-SP 000100"
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: `1px solid ${MODAL_FOLHA_A4_TOKENS.signaturePad.border}`,
+                    fontSize: '0.82rem',
+                    color: MODAL_FOLHA_A4_TOKENS.signaturePad.fg,
+                    backgroundColor: '#FFFFFF',
+                  }}
+                />
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                  <Button
+                    type="button"
+                    variant="outlined"
+                    onClick={handleGenerateKeyboardSignature}
+                    sx={styles.toggleChipButton(false)}
+                  >
+                    Gerar Rubrica por Teclado
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outlined"
+                    onClick={handleClearSignature}
+                    sx={styles.toggleChipButton(false)}
+                  >
+                    Limpar Rubrica
+                  </Button>
                 </Box>
               </Box>
-            );
-          })}
+            </Box>
+
+            {exportErrorMessage !== null ? (
+              <Box role="alert" sx={styles.errorBanner}>
+                {exportErrorMessage}
+              </Box>
+            ) : null}
+
+            {exportStatusMessage !== null ? (
+              <Box role="status" aria-live="polite" aria-atomic="true" sx={styles.statusBanner}>
+                {exportStatusMessage}
+              </Box>
+            ) : null}
+          </Box>
+
+          <Box ref={setPreviewDeskEl} sx={styles.previewDesk}>
+            {documentModel.pages.map((page) => {
+              const singlePageModel: A4ScheduleDocumentModel = {
+                ...documentModel,
+                pages: [page],
+              };
+              return (
+                <Box
+                  key={page.pageNumber}
+                  sx={{
+                    width: `${scaleInfo.scaledWidthPx}px`,
+                    height: `${scaleInfo.scaledHeightPx}px`,
+                    mx: 'auto',
+                    overflow: 'clip',
+                    position: 'relative',
+                    boxShadow: '0 8px 24px rgba(15, 23, 42, 0.14)',
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: `${scaleInfo.pageWidthPx}px`,
+                      height: `${scaleInfo.pageHeightPx}px`,
+                      transform: `scale(${scaleInfo.scale})`,
+                      transformOrigin: 'top left',
+                    }}
+                  >
+                    <FolhaEscalaA4Document model={singlePageModel} />
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
         </Box>
       </Dialog>
 

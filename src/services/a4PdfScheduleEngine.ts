@@ -1113,7 +1113,7 @@ export function buildA4ScheduleDocumentModel(
 
   // Paginacao euclidiana dinamica em mm (M3.1 / S09 / S10 / S11): zero paginas fantasmas!
   const firstPageHeaderHeightMm = 24.0;
-  const contPageHeaderHeightMm = 15.5;
+  const contPageHeaderHeightMm = 18.5;
   const headerGapMm = 2.0;
   const tableHeaderHeightMm = 7.2;
   const footerHeightMm = 23.5;
@@ -1441,17 +1441,44 @@ function renderPageContentStream(model: A4ScheduleDocumentModel, page: A4PageDis
       x0 + 5,
       page.headerYmm + 6.8,
       'F2',
-      9.8,
+      9.0,
       PDF_COLORS.white
     );
     drawTextMm(
-      `Total: ${model.summary.total} (Pres.: ${model.summary.presentes} | Cob.: ${model.summary.coberturas} | Faltas: ${model.summary.faltas} | Folgas: ${model.summary.folgas})  •  ${pageIndicatorText}`,
+      `Emissão: ${model.emittedDisplayBr}  •  ${pageIndicatorText}`,
+      x0 + w - 72,
+      page.headerYmm + 6.8,
+      'F1',
+      7.2,
+      PDF_COLORS.white
+    );
+    drawTextMm(
+      `Total: ${model.summary.total} (Pres.: ${model.summary.presentes} | Cob.: ${model.summary.coberturas} | Faltas: ${model.summary.faltas} | Folgas: ${model.summary.folgas})`,
       x0 + 5,
-      page.headerYmm + 12.4,
+      page.headerYmm + 14.6,
       'F1',
       7.5,
       [0.85, 0.9, 0.95]
     );
+    if (model.privacyMode) {
+      strokeAndFillRectMm(
+        x0 + w - 58,
+        page.headerYmm + 9.8,
+        54,
+        6.4,
+        PDF_COLORS.lgpdBg,
+        PDF_COLORS.lgpdFg,
+        0.6
+      );
+      drawTextMm(
+        'MODO MURAL PÚBLICO LGPD',
+        x0 + w - 55,
+        page.headerYmm + 14.2,
+        'F2',
+        6.6,
+        PDF_COLORS.lgpdFg
+      );
+    }
   }
 
   // 2. Cabecalho de colunas da tabela (repetido em 1..N — S11)

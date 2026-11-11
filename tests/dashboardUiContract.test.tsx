@@ -11,7 +11,9 @@ import {
 } from '../src/components/BarraPlanilha/BarraPlanilha.styles';
 import CardCuidador from '../src/components/CardCuidador/CardCuidador';
 import { CARD_STATUS_TOKENS } from '../src/components/CardCuidador/CardCuidador.styles';
-import { FolhaEscalaA4Document } from '../src/components/ModalFolhaEscalaA4/ModalFolhaEscalaA4';
+import ModalFolhaEscalaA4, {
+  FolhaEscalaA4Document,
+} from '../src/components/ModalFolhaEscalaA4/ModalFolhaEscalaA4';
 import { MODAL_FOLHA_A4_TOKENS } from '../src/components/ModalFolhaEscalaA4/ModalFolhaEscalaA4.styles';
 import PainelCobertura from '../src/components/PainelCobertura/PainelCobertura';
 import { PAINEL_COBERTURA_TOKENS } from '../src/components/PainelCobertura/PainelCobertura.styles';
@@ -288,6 +290,7 @@ describe('FE #2 & FE #7 — Dashboard, CardCuidador & PainelCobertura SSR Semant
       'lgpdActiveBadge',
       'signaturePad',
       'statusBanner',
+      'errorBanner',
     ] as const) {
       const tok = MODAL_FOLHA_A4_TOKENS[lightSurfaceKey];
       expect(
@@ -624,7 +627,8 @@ describe('FE #2 & FE #7 — Dashboard, CardCuidador & PainelCobertura SSR Semant
     expect(indexCss).not.toMatch(/min-height:\s*297mm/i);
     expect(indexCss).not.toMatch(/min-height:\s*210mm/i);
 
-    // S20: Verify isModalDialogOpen() & BarraPlanilha [aria-modal="true"] suppression contract
+    // S20 & S20b: Verify isModalDialogOpen() across ALL 6 BarraPlanilha entrypoints (3 window + 3 local React drag/drop)
+    // and sibling isolation of <ModalFolhaEscalaA4> outside the CSV dropzone <Box>
     expect(isModalDialogOpen(null)).toBe(false);
     expect(
       isModalDialogOpen({
@@ -642,6 +646,36 @@ describe('FE #2 & FE #7 — Dashboard, CardCuidador & PainelCobertura SSR Semant
       'utf8'
     );
     const modalGuardMatches = [...barraSource.matchAll(/isModalDialogOpen\(\)/g)];
-    expect(modalGuardMatches.length).toBeGreaterThanOrEqual(3);
+    expect(modalGuardMatches.length).toBeGreaterThanOrEqual(6);
+    expect(barraSource).toMatch(/<\/Box>\s*\{isPdfStudioOpen \?\s*\(?\s*<ModalFolhaEscalaA4/);
+
+    // S21: Verify full ModalFolhaEscalaA4 studio controls (role="dialog", aria-modal="true", WCAG 2.1.1 keyboard rubric)
+    const studioHtml = renderToStaticMarkup(
+      <ThemeProvider theme={warmCareTheme}>
+        <ModalFolhaEscalaA4
+          open
+          disablePortal
+          initialPrivacyMode
+          cuidadores={roster35}
+          onClose={() => undefined}
+        />
+      </ThemeProvider>
+    );
+    expect(studioHtml).toContain('role="dialog"');
+    expect(studioHtml).toContain('aria-modal="true"');
+    expect(studioHtml).toContain('Baixar PDF Vetorial (.pdf)');
+    expect(studioHtml).toContain('Imprimir para Mural');
+    expect(studioHtml).toContain('Retrato (210×297mm)');
+    expect(studioHtml).toContain('Paisagem (297×210mm)');
+    expect(studioHtml).toContain('Modo Mural Público LGPD: Ativo');
+    expect(studioHtml).toContain('Gerar Rubrica por Teclado');
+    expect(studioHtml).toContain('Limpar Rubrica');
+    expect(studioHtml).toContain('id="a4-signer-input"');
+
+    const studioButtons = [...studioHtml.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/gi)];
+    expect(studioButtons.length).toBeGreaterThanOrEqual(7);
+    for (const [, inner] of studioButtons) {
+      expect(inner).not.toMatch(/<(button|a|input|div|p)\b/i);
+    }
   });
 });
