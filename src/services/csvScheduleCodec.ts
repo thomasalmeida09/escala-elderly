@@ -326,7 +326,15 @@ export function decodeSpreadsheetBytes(bytes: Uint8Array): DecodedSpreadsheetTex
         'Fluxo UTF-16LE truncado ou corrompido (tamanho ímpar de bytes).'
       );
     }
-    text = new TextDecoder('utf-16le', { fatal: true }).decode(payload);
+    try {
+      text = new TextDecoder('utf-16le', { fatal: true }).decode(payload);
+    } catch (utf16LeError) {
+      void utf16LeError;
+      throw new CsvScheduleError(
+        'UNSUPPORTED_BINARY_FILE',
+        'Fluxo UTF-16LE inválido ou corrompido (sequência surrogate órfã).'
+      );
+    }
     encoding = 'utf-16le';
   } else if (startsWithBytes(bytes, [0xfe, 0xff])) {
     // (f) UTF-16BE BOM (FE FF)
@@ -340,7 +348,15 @@ export function decodeSpreadsheetBytes(bytes: Uint8Array): DecodedSpreadsheetTex
         'Fluxo UTF-16BE truncado ou corrompido (tamanho ímpar de bytes).'
       );
     }
-    text = new TextDecoder('utf-16be', { fatal: true }).decode(payload);
+    try {
+      text = new TextDecoder('utf-16be', { fatal: true }).decode(payload);
+    } catch (utf16BeError) {
+      void utf16BeError;
+      throw new CsvScheduleError(
+        'UNSUPPORTED_BINARY_FILE',
+        'Fluxo UTF-16BE inválido ou corrompido (sequência surrogate órfã).'
+      );
+    }
     encoding = 'utf-16be';
   } else {
     // (g) Fluxo sem BOM: rejeita bytes nulos e auto-cura UTF-8 -> Windows-1252 (ANSI PT-BR)
@@ -944,11 +960,7 @@ function parseCsvPhoneField(raw: string | undefined, line: number): string | und
   return cleaned;
 }
 
-const COMPOUND_HEADER_STOPWORDS: ReadonlySet<string> = new Set([
-  'a',
-  'o',
-  'os',
-  'as',
+const HEADER_PREPOSITION_WORDS: ReadonlySet<string> = new Set([
   'de',
   'da',
   'do',
@@ -957,7 +969,22 @@ const COMPOUND_HEADER_STOPWORDS: ReadonlySet<string> = new Set([
   'em',
   'no',
   'na',
+  'nos',
+  'nas',
   'por',
+  'pelo',
+  'pela',
+  'pelos',
+  'pelas',
+  'para',
+]);
+
+const COMPOUND_HEADER_STOPWORDS: ReadonlySet<string> = new Set([
+  'a',
+  'o',
+  'os',
+  'as',
+  ...HEADER_PREPOSITION_WORDS,
   'ou',
   'e',
   'completo',
@@ -970,6 +997,17 @@ const COMPOUND_HEADER_STOPWORDS: ReadonlySet<string> = new Set([
   'horas',
 ]);
 
+const SPECIFIC_HEADER_FIELDS: ReadonlySet<CanonicalCsvField> = new Set([
+  'substituto',
+  'horasDescanso',
+  'telefone',
+  'quarto',
+  'status',
+  'id',
+]);
+
+const CONTEXT_HEADER_FIELDS: ReadonlySet<CanonicalCsvField> = new Set(['nome', 'turno']);
+
 function resolveCanonicalHeaderField(rawHeaderCell: string): CanonicalCsvField | undefined {
   const exactToken = normalizeAsciiToken(rawHeaderCell);
   if (exactToken.length === 0) {
@@ -981,7 +1019,7 @@ function resolveCanonicalHeaderField(rawHeaderCell: string): CanonicalCsvField |
     return directMatch;
   }
 
-  // Cabecalhos compostos reais (ex.: "Profissional\n(Nome Completo)", "Posto / Ala", "Nome do Substituto")
+  // Cabecalhos compostos reais (ex.: "Profissional\n(Nome Completo)", "Situação\nno Plantão", "ID da\nEscala")
   // nunca contem digitos de dados ("Quarto 05", "07h-19h") e todas as palavras pertencem ao vocabulario de cabecalho.
   if (/\d/.test(rawHeaderCell)) {
     return undefined;
@@ -1015,9 +1053,43 @@ function resolveCanonicalHeaderField(rawHeaderCell: string): CanonicalCsvField |
     return [...matchedFields][0];
   }
 
-  // Ex.: "Cuidador Substituto" ou "Nome do Substituto" qualifica 'substituto'
-  if (matchedFields.size === 2 && matchedFields.has('nome') && matchedFields.has('substituto')) {
-    return 'substituto';
+  const specificMatches = [...matchedFields].filter((field) => SPECIFIC_HEADER_FIELDS.has(field));
+  const contextMatches = [...matchedFields].filter((field) => CONTEXT_HEADER_FIELDS.has(field));
+
+  // Atributo especifico qualificado por substantivo contextual da escala/profissional
+  // Ex.: "Situação no Plantão" -> 'status', "ID da Escala" -> 'id', "WhatsApp do Cuidador" -> 'telefone',
+  // "Quarto do Plantão" -> 'quarto', "Horas de Descanso da Escala" -> 'horasDescanso', "Cuidador Substituto" -> 'substituto'.
+  // Pares genuinamente ambiguos entre 2 atributos especificos ("Telefone / Quarto", "ID / Status") continuam undefined.
+  if (
+    specificMatches.length === 1 &&
+    specificMatches.length + contextMatches.length === matchedFields.size
+  ) {
+    return specificMatches[0];
+  }
+
+  // Par contextual {'nome', 'turno'} desambiguado pelo nucleo nominal anterior a preposicao:
+  // Ex.: "Turno do Cuidador" -> 'turno'; "Profissional do Plantão" -> 'nome'; "Nome / Turno" (sem preposicao) -> undefined.
+  if (specificMatches.length === 0 && contextMatches.length === 2) {
+    let headField: CanonicalCsvField | undefined;
+    let sawPrepositionAfterHead = false;
+
+    for (const word of words) {
+      if (HEADER_PREPOSITION_WORDS.has(word)) {
+        if (headField !== undefined) {
+          sawPrepositionAfterHead = true;
+        }
+        continue;
+      }
+      if (COMPOUND_HEADER_STOPWORDS.has(word)) {
+        continue;
+      }
+      const wordField = HEADER_ALIAS_MAP[word];
+      if (headField === undefined) {
+        headField = wordField;
+      } else if (sawPrepositionAfterHead && wordField !== undefined && wordField !== headField) {
+        return headField;
+      }
+    }
   }
 
   return undefined;

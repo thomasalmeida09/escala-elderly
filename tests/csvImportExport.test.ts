@@ -195,6 +195,20 @@ describe('FE #3 — Auto-Healing CSV/TSV Codec, OWASP Formula Guard & Local-Firs
       expect((err as CsvScheduleError).message).toContain('UTF-32');
     }
 
+    // Orphan UTF-16LE / UTF-16BE surrogates MUST throw typed CsvScheduleError('UNSUPPORTED_BINARY_FILE') instead of raw TypeError (C2a)
+    for (const malformedUtf16 of [
+      new Uint8Array([0xff, 0xfe, 0x00, 0xd8]),
+      new Uint8Array([0xfe, 0xff, 0xd8, 0x00]),
+    ]) {
+      try {
+        decodeSpreadsheetBytes(malformedUtf16);
+        expect.unreachable('Malformed UTF-16 orphan surrogate should have been rejected');
+      } catch (err) {
+        expect(err).toBeInstanceOf(CsvScheduleError);
+        expect((err as CsvScheduleError).code).toBe('UNSUPPORTED_BINARY_FILE');
+      }
+    }
+
     // NUL byte in stream & string
     expect(() =>
       decodeSpreadsheetBytes(new Uint8Array([0x6e, 0x6f, 0x6d, 0x65, 0x00, 0x3b]))
@@ -258,6 +272,7 @@ describe('FE #3 — Auto-Healing CSV/TSV Codec, OWASP Formula Guard & Local-Firs
       detectCsvDelimiter('"Ana, Bia";Presente;"Diurno, Ala B"\nLucas;Folga;"Noturno, Ala C"')
     ).toBe(';');
     expect(detectCsvDelimiter('nome,status,turno\n"Ana; Bia",Presente,"Diurno; Ala B"')).toBe(',');
+    expect(detectCsvDelimiter('"Ana; Bia; Cia",Presente\n"Lucas; Paz; Luz",Folga')).toBe(',');
 
     const parsed = parseCsvSchedule(validQuotedCsv);
     expect(parsed.delimiter).toBe(';');
@@ -278,6 +293,46 @@ describe('FE #3 — Auto-Healing CSV/TSV Codec, OWASP Formula Guard & Local-Firs
         status: 'Cobertura',
         turno: 'Noturno, Ala Sul',
         horasDescanso: 0,
+        substituto: 'Beatriz Alves',
+      },
+    ]);
+
+    // Qualified PT-BR compound Excel headers ("ID da\nEscala", "Situação\nno Plantão", "WhatsApp do Cuidador",
+    // "Turno do Cuidador", "Profissional do Plantão", etc.) MUST preserve every column without silent drop (C1)
+    const qualifiedCompoundCsv = [
+      '"ID da\nEscala";"Profissional do Plantão";"Situação\nno Plantão";"Turno do Cuidador";"Quarto do Plantão";"WhatsApp do Cuidador";"Horas de Descanso da Escala";"Substituto no Plantão";"Telefone / Quarto"',
+      '10;João Conceição;Presente;Diurno (07h-19h);Refeitório;+55 11 90000-0110;24;--;ignorado',
+      '11;Cláudia Araújo;Faltou;Noturno (19h-07h);Quarto 12;+55 11 90000-0111;0;--;ignorado',
+      '12;Sônia Assunção;Cobertura;Diurno (07h-19h);Quarto 14;+55 11 90000-0112;16;Beatriz Alves;ignorado',
+    ].join('\r\n');
+    const parsedQualified = parseCsvSchedule(qualifiedCompoundCsv);
+    expect(parsedQualified.cuidadores).toEqual([
+      {
+        id: 10,
+        nome: 'João Conceição',
+        status: 'Presente',
+        turno: 'Diurno (07h-19h)',
+        quarto: 'Refeitório',
+        telefone: '+55 11 90000-0110',
+        horasDescanso: 24,
+      },
+      {
+        id: 11,
+        nome: 'Cláudia Araújo',
+        status: 'Faltou',
+        turno: 'Noturno (19h-07h)',
+        quarto: 'Quarto 12',
+        telefone: '+55 11 90000-0111',
+        horasDescanso: 0,
+      },
+      {
+        id: 12,
+        nome: 'Sônia Assunção',
+        status: 'Cobertura',
+        turno: 'Diurno (07h-19h)',
+        quarto: 'Quarto 14',
+        telefone: '+55 11 90000-0112',
+        horasDescanso: 16,
         substituto: 'Beatriz Alves',
       },
     ]);
@@ -587,6 +642,11 @@ describe('FE #3 — Auto-Healing CSV/TSV Codec, OWASP Formula Guard & Local-Firs
     map.set(UNDO_IMPORT_STORAGE_KEY, '{"schemaVersion":999,"savedAtIso":"2026","cuidadores":[]}');
 
     const store = createLocalFirstStore({ storage: adapter });
+    expect(store.readUndoBackup()).toBeNull();
+    expect(map.has(UNDO_IMPORT_STORAGE_KEY)).toBe(false);
+
+    // Syntactically truncated JSON hits the catch block and MUST also purge undo_backup:v1 (C2b / Saboteur S11)
+    map.set(UNDO_IMPORT_STORAGE_KEY, '{corrupt');
     expect(store.readUndoBackup()).toBeNull();
     expect(map.has(UNDO_IMPORT_STORAGE_KEY)).toBe(false);
 

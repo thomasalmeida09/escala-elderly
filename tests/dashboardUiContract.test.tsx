@@ -2,7 +2,10 @@ import { ThemeProvider } from '@mui/material';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import BarraPlanilha from '../src/components/BarraPlanilha/BarraPlanilha';
-import { BARRA_PLANILHA_TOKENS } from '../src/components/BarraPlanilha/BarraPlanilha.styles';
+import {
+  BARRA_PLANILHA_TOKENS,
+  styles as barraPlanilhaStyles,
+} from '../src/components/BarraPlanilha/BarraPlanilha.styles';
 import CardCuidador from '../src/components/CardCuidador/CardCuidador';
 import { CARD_STATUS_TOKENS } from '../src/components/CardCuidador/CardCuidador.styles';
 import PainelCobertura from '../src/components/PainelCobertura/PainelCobertura';
@@ -466,7 +469,11 @@ describe('FE #2 & FE #7 — Dashboard, CardCuidador & PainelCobertura SSR Semant
     expect(hydratedUndoHtml).toContain('Fernanda Melo');
     expect(hydratedUndoHtml).toContain('Desfazer Importação');
 
-    // Decorative emojis inside BarraPlanilha buttons are aria-hidden="true" (WCAG 2.5.3)
+    // Decorative emojis inside BarraPlanilha buttons are aria-hidden="true" and spaced via Flexbox gap: 0.75 (WCAG 2.5.3 + Nit 1)
+    expect((barraPlanilhaStyles.importButton as Record<string, unknown>).gap).toBe(0.75);
+    expect((barraPlanilhaStyles.exportButton as Record<string, unknown>).gap).toBe(0.75);
+    expect((barraPlanilhaStyles.undoButton as Record<string, unknown>).gap).toBe(0.75);
+
     const allButtons = [...hydratedUndoHtml.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/gi)];
     for (const [, inner] of allButtons) {
       expect(inner).not.toMatch(/<(button|a|input)\b/i);
