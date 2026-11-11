@@ -85,7 +85,8 @@ escala-elderly/
 │   │   ├── caregiverApi.ts                      # Cliente HTTP nativo (fetch + timeout 2.5s + AbortController)
 │   │   ├── caregiverSyncController.ts           # Máquina de sincronização híbrida Local-First <-> Spring Boot
 │   │   ├── coverageEngine.ts                    # Motor determinístico de cobertura CLT (>=11h) e WhatsApp wa.me
-│   │   └── localFirstStore.ts                   # Persistência síncrona 0ms (escala_elderly:schedule:v1)
+│   │   ├── csvScheduleCodec.ts                  # Codec tabular RFC 4180 / Excel PT-BR, anti-CSV Injection e BOM
+│   │   └── localFirstStore.ts                   # Persistência síncrona 0ms (schedule:v1 + undo_backup:v1)
 │   ├── theme/
 │   │   └── theme.ts                             # Tokens visuais do tema "warmCareTheme" (MUI)
 │   ├── types/
@@ -94,6 +95,7 @@ escala-elderly/
 │   ├── index.css                                # Reset limpo de viewport e fundação @media print A4
 │   └── main.tsx                                 # Ponto de entrada da aplicação React 19
 ├── tests/
+│   ├── csvImportExport.test.ts                  # Suíte unitária de codec CSV/TSV, OWASP guard, BOM e Undo Local-First
 │   ├── dashboardUiContract.test.tsx             # Suíte SSR de semântica HTML5, WCAG 2.2 AA e StrictMode
 │   ├── governanceHygiene.test.ts                # Fitness Functions de CI, ADRs, Árvore e Clean-Room/LGPD
 │   ├── localFirstSync.test.ts                   # Suíte unitária de contrato, Local-First Store e concorrência API

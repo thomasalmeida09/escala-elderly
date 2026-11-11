@@ -2,6 +2,7 @@ import caregiversSeedRaw from '../mocks/Caregive.json';
 import { type Cuidador, parseCuidadorList } from '../types/caregiver';
 
 export const SCHEDULE_STORAGE_KEY = 'escala_elderly:schedule:v1';
+export const UNDO_IMPORT_STORAGE_KEY = 'escala_elderly:undo_backup:v1';
 export const SCHEDULE_SCHEMA_VERSION = 1;
 
 export interface StorageAdapter {
@@ -17,6 +18,12 @@ export interface PersistedScheduleEnvelope {
   readonly cuidadores: Cuidador[];
 }
 
+export interface PersistedUndoBackupEnvelope {
+  readonly schemaVersion: typeof SCHEDULE_SCHEMA_VERSION;
+  readonly savedAtIso: string;
+  readonly cuidadores: Cuidador[];
+}
+
 export type HydrationSource = 'storage' | 'seed' | 'purged-corrupt';
 
 export interface HydratedScheduleState {
@@ -28,6 +35,7 @@ export interface HydratedScheduleState {
 export interface LocalFirstStoreOptions {
   readonly storage?: StorageAdapter | null;
   readonly storageKey?: string;
+  readonly undoStorageKey?: string;
   readonly nowIso?: () => string;
 }
 
@@ -37,6 +45,9 @@ export interface LocalFirstStore {
     cuidadores: readonly Cuidador[],
     pendingRemoteSync: boolean
   ): PersistedScheduleEnvelope;
+  readUndoBackup(): PersistedUndoBackupEnvelope | null;
+  writeUndoBackup(cuidadores: readonly Cuidador[]): PersistedUndoBackupEnvelope;
+  clearUndoBackup(): void;
   clear(): void;
 }
 
@@ -69,57 +80,58 @@ function isEnvelopeCandidate(value: unknown): value is Record<string, unknown> {
 
 export function createLocalFirstStore(options: LocalFirstStoreOptions = {}): LocalFirstStore {
   const storageKey = options.storageKey ?? SCHEDULE_STORAGE_KEY;
+  const undoStorageKey = options.undoStorageKey ?? UNDO_IMPORT_STORAGE_KEY;
   const nowIso = options.nowIso ?? (() => new Date().toISOString());
   const fallbackMemory = new Map<string, string>();
   const resolveStorage = (): StorageAdapter | null =>
     options.storage !== undefined ? options.storage : resolveDefaultStorage();
 
-  function safeRemoveRaw(): void {
-    fallbackMemory.delete(storageKey);
+  function safeRemoveRaw(key: string): void {
+    fallbackMemory.delete(key);
     const activeStorage = resolveStorage();
     if (!activeStorage) {
       return;
     }
     try {
-      activeStorage.removeItem(storageKey);
+      activeStorage.removeItem(key);
     } catch (removeError) {
-      fallbackMemory.delete(storageKey);
+      fallbackMemory.delete(key);
       void removeError;
     }
   }
 
-  function safeReadRaw(): string | null {
+  function safeReadRaw(key: string): string | null {
     const activeStorage = resolveStorage();
     if (activeStorage) {
       try {
-        const persisted = activeStorage.getItem(storageKey);
+        const persisted = activeStorage.getItem(key);
         if (persisted !== null) {
           return persisted;
         }
       } catch (readError) {
         void readError;
-        return fallbackMemory.get(storageKey) ?? null;
+        return fallbackMemory.get(key) ?? null;
       }
     }
-    return fallbackMemory.get(storageKey) ?? null;
+    return fallbackMemory.get(key) ?? null;
   }
 
-  function safeWriteRaw(serialized: string): void {
-    fallbackMemory.set(storageKey, serialized);
+  function safeWriteRaw(key: string, serialized: string): void {
+    fallbackMemory.set(key, serialized);
     const activeStorage = resolveStorage();
     if (!activeStorage) {
       return;
     }
     try {
-      activeStorage.setItem(storageKey, serialized);
+      activeStorage.setItem(key, serialized);
     } catch (writeError) {
-      fallbackMemory.set(storageKey, serialized);
+      fallbackMemory.set(key, serialized);
       void writeError;
     }
   }
 
   function readInitialState(): HydratedScheduleState {
-    const raw = safeReadRaw();
+    const raw = safeReadRaw(storageKey);
     if (raw === null) {
       return {
         cuidadores: getCanonicalSeed(),
@@ -137,7 +149,7 @@ export function createLocalFirstStore(options: LocalFirstStoreOptions = {}): Loc
         typeof decoded.updatedAtIso !== 'string' ||
         decoded.updatedAtIso.trim().length === 0
       ) {
-        safeRemoveRaw();
+        safeRemoveRaw(storageKey);
         return {
           cuidadores: getCanonicalSeed(),
           pendingRemoteSync: false,
@@ -153,7 +165,7 @@ export function createLocalFirstStore(options: LocalFirstStoreOptions = {}): Loc
       };
     } catch (corruptEnvelopeError) {
       void corruptEnvelopeError;
-      safeRemoveRaw();
+      safeRemoveRaw(storageKey);
       return {
         cuidadores: getCanonicalSeed(),
         pendingRemoteSync: false,
@@ -173,17 +185,67 @@ export function createLocalFirstStore(options: LocalFirstStoreOptions = {}): Loc
       pendingRemoteSync,
       cuidadores: validatedList,
     });
-    safeWriteRaw(JSON.stringify(envelope));
+    safeWriteRaw(storageKey, JSON.stringify(envelope));
     return envelope;
   }
 
+  function readUndoBackup(): PersistedUndoBackupEnvelope | null {
+    const raw = safeReadRaw(undoStorageKey);
+    if (raw === null) {
+      return null;
+    }
+
+    try {
+      const decoded: unknown = JSON.parse(raw);
+      if (
+        !isEnvelopeCandidate(decoded) ||
+        decoded.schemaVersion !== SCHEDULE_SCHEMA_VERSION ||
+        typeof decoded.savedAtIso !== 'string' ||
+        decoded.savedAtIso.trim().length === 0
+      ) {
+        safeRemoveRaw(undoStorageKey);
+        return null;
+      }
+
+      const validatedList = parseCuidadorList(decoded.cuidadores, 'undo.cuidadores');
+      return Object.freeze({
+        schemaVersion: SCHEDULE_SCHEMA_VERSION,
+        savedAtIso: decoded.savedAtIso,
+        cuidadores: validatedList,
+      });
+    } catch (corruptUndoError) {
+      void corruptUndoError;
+      safeRemoveRaw(undoStorageKey);
+      return null;
+    }
+  }
+
+  function writeUndoBackup(cuidadores: readonly Cuidador[]): PersistedUndoBackupEnvelope {
+    const validatedList = parseCuidadorList(cuidadores, 'undoSnapshot.cuidadores');
+    const envelope: PersistedUndoBackupEnvelope = Object.freeze({
+      schemaVersion: SCHEDULE_SCHEMA_VERSION,
+      savedAtIso: nowIso(),
+      cuidadores: validatedList,
+    });
+    safeWriteRaw(undoStorageKey, JSON.stringify(envelope));
+    return envelope;
+  }
+
+  function clearUndoBackup(): void {
+    safeRemoveRaw(undoStorageKey);
+  }
+
   function clear(): void {
-    safeRemoveRaw();
+    safeRemoveRaw(storageKey);
+    safeRemoveRaw(undoStorageKey);
   }
 
   return {
     readInitialState,
     writeSnapshot,
+    readUndoBackup,
+    writeUndoBackup,
+    clearUndoBackup,
     clear,
   };
 }

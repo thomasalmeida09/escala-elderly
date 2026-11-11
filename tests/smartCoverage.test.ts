@@ -131,6 +131,8 @@ describe('FE #7 — Smart Shift Coverage Engine (CLT Art. 66), WhatsApp Summons 
       'Helena Prado',
       'Beatriz Alves',
     ]);
+    expect(shiftlessSuggestions.eligible[0]?.shiftMatchLabel).toBe('Turno flexível');
+    expect(shiftlessSuggestions.eligible[1]?.shiftMatchLabel).toBe('Turno compatível');
   });
 
   it('3. enforces authoritative activeRoster shadowing over reservePool (anti-CLT-bypass M2.1)', () => {
