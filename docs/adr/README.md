@@ -83,7 +83,7 @@ Este documento registra as **Decisões Arquiteturais (ADRs)** do **Frontend**, d
   - Validar imediatamente a dor central mapeada no Onboarding: dar visibilidade instantânea quando um cuidador falta.
 - **Trade-offs (Vantagens vs. Custos Assumidos):**
   - ✅ **Vantagens:** Demonstração imediata de valor em menos de 3 segundos de uso.
-  - ⚠️ **Custos / Cuidados:** Exige na Sprint 2 evoluir do simples alerta visual (`FALTOU`) para a **ação de resolução** (sugerir folguista substituto e acionar via WhatsApp).
+  - ✅ **Evolução Implementada na Issue #7 (`ADR-FE-012`):** Ao detectar `status === 'Faltou'`, o painel agora abre imediatamente a estação de triagem `<PainelCobertura />` filtrando folguistas aptos pelo intervalo interjornada de `>= 11h` da CLT e acionando via `wa.me` em 1 clique.
 
 ---
 
@@ -167,7 +167,7 @@ Este documento registra as **Decisões Arquiteturais (ADRs)** do **Frontend**, d
   2. **Conventional Commits & _Fowler's Two Hats_:** Mensagens padronizadas (`feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `ci:`, `test:`) separando refatorações estruturais/formatação de mudanças comportamentais.
   3. **Regras de Revisão e Merge do PR:**
      - PR focado em **1 única Issue** (`Closes #Número`) preenchido segundo `.github/pull_request_template.md`;
-     - Roteamento automático de revisão via `.github/CODEOWNERS` (incluindo `/.github/`, `/docs/adr/`, `/src/theme/`, `/src/hooks/` e `/tests/`);
+     - Roteamento automático de revisão via `.github/CODEOWNERS` (incluindo `/.github/`, `/docs/adr/`, `/src/components/`, `/src/hooks/`, `/src/mocks/`, `/src/services/`, `/src/theme/`, `/src/types/` e `/tests/`);
      - **CI 100% Verde** + **1 Code Review aprovado** com resolução de threads antes do **Squash and Merge**.
 
 ---
@@ -194,3 +194,14 @@ Este documento registra as **Decisões Arquiteturais (ADRs)** do **Frontend**, d
       readonly substituto?: string; // Omitido sempre que status !== 'Cobertura'
     }
     ```
+
+---
+
+### 🗳️ ADR-FE-012: Motor Determinístico de Cobertura Inteligente (Art. 66 da CLT, Zero Sobreposição e Convocação WhatsApp)
+
+- **Status:** `ACEITA / IMPLEMENTADA`
+- **Onde está no código:** [`src/services/coverageEngine.ts`](../../src/services/coverageEngine.ts), [`src/components/PainelCobertura/PainelCobertura.tsx`](../../src/components/PainelCobertura/PainelCobertura.tsx), [`src/components/PainelCobertura/PainelCobertura.styles.ts`](../../src/components/PainelCobertura/PainelCobertura.styles.ts), [`src/services/caregiverSyncController.ts`](../../src/services/caregiverSyncController.ts), [`src/pages/Dashboard.tsx`](../../src/pages/Dashboard.tsx), [`tests/smartCoverage.test.ts`](../../tests/smartCoverage.test.ts) e [`tests/dashboardUiContract.test.tsx`](../../tests/dashboardUiContract.test.tsx).
+- **Decisão:**
+  - Implementar o motor puro `coverageEngine.ts` que combina dinamicamente os cuidadores em `'Folga'` da escala ativa (`activeRoster`, com autoridade total de sombreamento anti-bypass) com o banco sintético Clean-Room de folguistas de reserva (`FOLGUISTAS_RESERVA_PADRAO`, namespace `id: 9001..9003`), preservando paridade determinística entre os modos Online (`:8080`) e Offline (`Caregive.json`).
+  - Aplicar filtragem trabalhista _Poka-Yoke_ estrita exigindo `horasDescanso >= 11` (**Art. 66 da CLT**) e bloqueio em tempo real contra dupla alocação simultânea (_Zero Shift Overlap_ sobre `status === 'Cobertura'`), ranqueando candidatos por afinidade de turno, horas de descanso e origem.
+  - Renderizar `<PainelCobertura />` (`.no-print`) como irmão semântico adjacente fora do `<button>` de `<CardCuidador />` (preservando HTML5 válido, `WCAG 2.2 AA >= 4.5:1`, `WCAG 2.5.3` e restauração de foco `WCAG 2.4.3`), oferecendo acionamento `https://wa.me/` a custo R$ 0 com minimização de dados LGPD (`noopener noreferrer`, sem expor o nome pessoal do ausente) e confirmação em 1 clique sincronizada via `PATCH /api/cuidadores/{id}/status` / `POST /api/cuidadores/batch`.

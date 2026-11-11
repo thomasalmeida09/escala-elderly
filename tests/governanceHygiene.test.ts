@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { FOLGUISTAS_RESERVA_PADRAO } from '../src/services/coverageEngine';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(currentDir, '..');
@@ -34,6 +35,7 @@ const NON_RESERVED_EMAIL_PATTERN =
 
 const ANY_ADR_REFERENCE_PATTERN = /\bADR-(?:[A-Z]+-)?\d+\b/g;
 const CANONICAL_FE_ADR_PATTERN = /^ADR-FE-\d{3}$/;
+const CLEAN_ROOM_SYNTHETIC_PHONE_PATTERN = /^\+55 11 90000-01\d{2}$/;
 
 interface RulesetFile {
   enforcement: string;
@@ -58,6 +60,8 @@ interface CaregiverSeedRow {
   status: string;
   turno?: string;
   quarto?: string;
+  telefone?: string;
+  horasDescanso?: number;
 }
 
 function extractCiJobNames(ciYaml: string): string[] {
@@ -183,7 +187,7 @@ describe('Governance, Supply-Chain & Clean-Room Architectural Fitness Suite', ()
     }
   });
 
-  it('3. enforces strict ADR-FE-001..011 referential integrity across PR template, README, and CODEOWNERS', () => {
+  it('3. enforces strict ADR-FE-001..012 referential integrity across PR template, README, and CODEOWNERS', () => {
     const adrCatalog = readRepoFile('docs/adr/README.md');
     const prTemplate = readRepoFile('.github/pull_request_template.md');
     const readme = readRepoFile('README.md');
@@ -202,6 +206,7 @@ describe('Governance, Supply-Chain & Clean-Room Architectural Fitness Suite', ()
       'ADR-FE-009',
       'ADR-FE-010',
       'ADR-FE-011',
+      'ADR-FE-012',
     ]);
     const catalogSet = new Set(catalogHeadings);
 
@@ -240,9 +245,11 @@ describe('Governance, Supply-Chain & Clean-Room Architectural Fitness Suite', ()
     for (const protectedPath of [
       '/.github/',
       '/docs/adr/',
-      '/src/theme/',
+      '/src/components/',
       '/src/hooks/',
+      '/src/mocks/',
       '/src/services/',
+      '/src/theme/',
       '/src/types/',
       '/tests/',
     ]) {
@@ -404,6 +411,17 @@ describe('Governance, Supply-Chain & Clean-Room Architectural Fitness Suite', ()
       expect(allowedStatuses.has(row.status)).toBe(true);
       expect(typeof row.turno === 'string' && row.turno.trim().length > 0).toBe(true);
       expect(typeof row.quarto === 'string' && row.quarto.trim().length > 0).toBe(true);
+      expect(typeof row.telefone === 'string').toBe(true);
+      expect(CLEAN_ROOM_SYNTHETIC_PHONE_PATTERN.test(row.telefone ?? '')).toBe(true);
+      expect(Number.isInteger(row.horasDescanso) && (row.horasDescanso ?? -1) >= 0).toBe(true);
+    }
+
+    for (const reserveRow of FOLGUISTAS_RESERVA_PADRAO) {
+      expect(reserveRow.id).toBeGreaterThanOrEqual(9001);
+      expect(CLEAN_ROOM_SYNTHETIC_PHONE_PATTERN.test(reserveRow.telefone ?? '')).toBe(true);
+      expect(
+        Number.isInteger(reserveRow.horasDescanso) && (reserveRow.horasDescanso ?? -1) >= 0
+      ).toBe(true);
     }
 
     const carlos = seed.find((c) => c.id === 3);
