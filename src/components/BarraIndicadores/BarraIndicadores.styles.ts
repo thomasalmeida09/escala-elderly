@@ -109,14 +109,14 @@ export const styles = {
   container: {
     bgcolor: BARRA_INDICADORES_TOKENS.surface.bg,
     color: BARRA_INDICADORES_TOKENS.surface.fg,
-    p: '6px 10px',
-    mb: 1,
+    p: { xs: '5px 8px', sm: '7px 12px' },
+    mb: { xs: 0.75, sm: 1 },
     borderRadius: '8px',
     border: `1px solid ${BARRA_INDICADORES_TOKENS.surface.border}`,
     boxShadow: '0px 4px 20px rgba(45, 49, 46, 0.03)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
+    gap: { xs: '3px', sm: '4px' },
     minWidth: 0,
   } as SxProps<Theme>,
 
@@ -151,7 +151,7 @@ export const styles = {
   kpiGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-    gap: '6px',
+    gap: { xs: '5px', sm: '6px' },
     minWidth: 0,
     '@media (max-width: 359.95px)': {
       gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
@@ -165,7 +165,7 @@ export const styles = {
       color: token.fg,
       border: `1px solid ${token.border}`,
       borderRadius: '6px',
-      p: '4px 6px',
+      p: { xs: '3px 5px', sm: '4px 6px' },
       display: 'flex',
       flexDirection: 'column',
       gap: '1px',
@@ -205,13 +205,14 @@ export const styles = {
 
   kpiSubLabel: {
     color: 'inherit',
-    fontSize: '0.575rem',
+    fontFamily: '"Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    fontVariantNumeric: 'tabular-nums',
+    fontSize: { xs: '0.575rem', sm: '0.625rem' },
     fontWeight: 600,
     lineHeight: 1.15,
+    letterSpacing: '-0.02em',
     textTransform: 'none',
     whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
   } as SxProps<Theme>,
 
   thermometerTrack: {
@@ -252,11 +253,19 @@ export const styles = {
 
   statusText: (tone: ThermometerTone): SxProps<Theme> => ({
     color: BARRA_INDICADORES_TOKENS.thermometerFill[tone].textOnSurface,
-    fontSize: '0.61rem',
+    fontFamily: '"Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    fontVariantNumeric: 'tabular-nums',
+    fontSize: '0.625rem',
     fontWeight: 600,
-    lineHeight: 1.2,
+    lineHeight: 1.15,
+    letterSpacing: '-0.01em',
     textTransform: 'none',
     minWidth: 0,
     overflowWrap: 'break-word',
   }),
+
+  nowrapCurrency: {
+    whiteSpace: 'nowrap',
+    fontVariantNumeric: 'tabular-nums',
+  } as SxProps<Theme>,
 };

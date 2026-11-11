@@ -9,6 +9,28 @@ import type { Cuidador } from '../../types/caregiver';
 import Text from '../common/Text';
 import { styles } from './BarraIndicadores.styles';
 
+const CURRENCY_TOKEN_SPLIT_REGEX = /((?:\+|-)?R\$ (?:[0-9.,]+|•••,••))/g;
+
+function renderStatusWithAtomicCurrency(statusMessage: string) {
+  const segments = statusMessage.split(CURRENCY_TOKEN_SPLIT_REGEX);
+  if (segments.length <= 1) {
+    return statusMessage;
+  }
+  return segments.map((segment, index) => {
+    if (segment.length === 0) {
+      return null;
+    }
+    if (index % 2 === 1) {
+      return (
+        <Box key={`currency-${index}`} component="span" sx={styles.nowrapCurrency}>
+          {segment}
+        </Box>
+      );
+    }
+    return segment;
+  });
+}
+
 export interface BarraIndicadoresProps {
   readonly cuidadores: readonly Cuidador[];
   readonly privacyMode?: boolean;
@@ -119,7 +141,7 @@ export default function BarraIndicadores({
           variant="caption"
           sx={styles.statusText(presentation.thermometerTone)}
         >
-          {presentation.statusMessage}
+          {renderStatusWithAtomicCurrency(presentation.statusMessage)}
         </Text>
       </Box>
     </Box>
