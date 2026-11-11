@@ -17,7 +17,7 @@
 
 - [ ] **Stack, Build, Vitest & Zero-Bloat (`ADR-FE-002` & `ADR-FE-009`):** `bun install --frozen-lockfile`, `bun run format:check`, `bun run lint`, `bun run test` e `bun run build` passam 100% verdes localmente; nenhum lockfile concorrente (`package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`) ou biblioteca redundante (`lodash`, `moment`, `axios`, `classnames`, `uuid`) foi adicionado.
 - [ ] **Design System Material UI (`ADR-FE-003`):** Estilos isolados em arquivos `.styles.ts` / `sx` consumindo os tokens de `src/theme/theme.ts` (`warmCareTheme`) e o wrapper `<Text />`, sem hexadecimais soltos fora do tema.
-- [ ] **Custom Hooks, Local-First & Contrato JSON Canônico (`ADR-FE-004` & `ADR-FE-011`):** Componentes visuais permanecem desacoplados de estado/fetch (`src/hooks/`) e preservam paridade estrita do contrato `Cuidador` com o Backend (`id: 3 = Carlos Rocha`).
+- [ ] **Custom Hooks, Local-First, Cobertura CLT & Contrato JSON Canônico (`ADR-FE-004`, `ADR-FE-011` & `ADR-FE-012`):** Componentes visuais permanecem desacoplados de estado/fetch (`src/hooks/` + `src/services/`) e preservam paridade estrita do contrato `Cuidador` com o Backend (`id: 3 = Carlos Rocha`).
 
 ### 2. Formatação, Pragmatic Code Review & Git Hygiene (`agency-code-reviewer` & `agency-git-workflow-master`)
 

@@ -2,8 +2,10 @@
 * @thomasalmeida09 @augustoheiss
 /.github/ @thomasalmeida09 @augustoheiss
 /docs/adr/ @thomasalmeida09 @augustoheiss
-/src/theme/ @thomasalmeida09 @augustoheiss
+/src/components/ @thomasalmeida09 @augustoheiss
 /src/hooks/ @thomasalmeida09 @augustoheiss
+/src/mocks/ @thomasalmeida09 @augustoheiss
 /src/services/ @thomasalmeida09 @augustoheiss
+/src/theme/ @thomasalmeida09 @augustoheiss
 /src/types/ @thomasalmeida09 @augustoheiss
 /tests/ @thomasalmeida09 @augustoheiss
