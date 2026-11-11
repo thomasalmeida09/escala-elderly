@@ -1403,81 +1403,154 @@ function renderPageContentStream(model: A4ScheduleDocumentModel, page: A4PageDis
   fillRectMm(x0, page.headerYmm, 2.2, page.headerHeightMm, PDF_COLORS.tealAccent);
 
   const pageIndicatorText = `Página ${page.pageNumber}/${page.totalPages}`;
+  const headerLeftXMm = x0 + 5.0;
+  const headerRightEdgeMm = x0 + w - 4.0;
+  const lgpdBadgeW = 54.0;
+  const lgpdBadgeX = headerRightEdgeMm - lgpdBadgeW;
+
   if (!page.isContinuation) {
-    drawTextMm(model.unitTitle, x0 + 5, page.headerYmm + 7.2, 'F2', 11.5, PDF_COLORS.white);
-    drawTextMm(model.subtitle, x0 + 5, page.headerYmm + 12.2, 'F1', 7.8, [0.82, 0.87, 0.93]);
-    const kpiLine = `Total: ${model.summary.total}  |  Presentes: ${model.summary.presentes}  |  Coberturas: ${model.summary.coberturas}  |  Faltas: ${model.summary.faltas}  |  Folgas: ${model.summary.folgas}`;
-    drawTextMm(kpiLine, x0 + 5, page.headerYmm + 18.8, 'F2', 8.0, PDF_COLORS.white);
+    const emissionText = `Emissão: ${model.emittedDisplayBr}  •  ${pageIndicatorText}`;
+    const emissionFontPt = 7.4;
+    const emissionWidthMm = measureAfmWidthMm(emissionText, emissionFontPt, 'Helvetica');
+    const emissionXMm = Math.max(x0 + w * 0.52, headerRightEdgeMm - emissionWidthMm);
+    const titleMaxWidthMm = Math.max(40, emissionXMm - headerLeftXMm - 3.5);
+    const titleFit = solveTextBoxAutoFit(model.unitTitle, titleMaxWidthMm, 5.2, {
+      maxFontPt: 11.5,
+      minFontPt: 6.5,
+      font: 'Helvetica-Bold',
+      maxLinesOverride: 1,
+    });
     drawTextMm(
-      `Emissão: ${model.emittedDisplayBr}  •  ${pageIndicatorText}`,
-      x0 + w - 72,
+      titleFit.lines[0] ?? model.unitTitle,
+      headerLeftXMm,
       page.headerYmm + 7.2,
-      'F1',
-      7.4,
+      'F2',
+      titleFit.fontSizePt,
       PDF_COLORS.white
     );
+    drawTextMm(
+      emissionText,
+      emissionXMm,
+      page.headerYmm + 7.2,
+      'F1',
+      emissionFontPt,
+      PDF_COLORS.white
+    );
+
+    const subMaxWidthMm = Math.max(
+      40,
+      (model.privacyMode ? lgpdBadgeX - 3.5 : headerRightEdgeMm) - headerLeftXMm
+    );
+    const subtitleFit = solveTextBoxAutoFit(model.subtitle, subMaxWidthMm, 4.5, {
+      maxFontPt: 7.8,
+      minFontPt: 6.5,
+      font: 'Helvetica',
+      maxLinesOverride: 1,
+    });
+    drawTextMm(
+      subtitleFit.lines[0] ?? model.subtitle,
+      headerLeftXMm,
+      page.headerYmm + 12.2,
+      'F1',
+      subtitleFit.fontSizePt,
+      [0.82, 0.87, 0.93]
+    );
+
+    const kpiLine = `Total: ${model.summary.total}  |  Presentes: ${model.summary.presentes}  |  Coberturas: ${model.summary.coberturas}  |  Faltas: ${model.summary.faltas}  |  Folgas: ${model.summary.folgas}`;
+    const kpiFit = solveTextBoxAutoFit(kpiLine, subMaxWidthMm, 4.5, {
+      maxFontPt: 8.0,
+      minFontPt: 6.5,
+      font: 'Helvetica-Bold',
+      maxLinesOverride: 1,
+    });
+    drawTextMm(
+      kpiFit.lines[0] ?? kpiLine,
+      headerLeftXMm,
+      page.headerYmm + 18.8,
+      'F2',
+      kpiFit.fontSizePt,
+      PDF_COLORS.white
+    );
+
     if (model.privacyMode) {
       strokeAndFillRectMm(
-        x0 + w - 58,
+        lgpdBadgeX,
         page.headerYmm + 13.6,
-        54,
+        lgpdBadgeW,
         6.8,
         PDF_COLORS.lgpdBg,
         PDF_COLORS.lgpdFg,
         0.6
       );
-      drawTextMm(
-        'MODO MURAL PÚBLICO LGPD',
-        x0 + w - 55,
-        page.headerYmm + 18.2,
-        'F2',
-        6.8,
-        PDF_COLORS.lgpdFg
-      );
+      const lgpdText = 'MODO MURAL PÚBLICO LGPD';
+      const lgpdTextW = measureAfmWidthMm(lgpdText, 6.8, 'Helvetica-Bold');
+      const lgpdTextX = lgpdBadgeX + Math.max(1.5, (lgpdBadgeW - lgpdTextW) / 2);
+      drawTextMm(lgpdText, lgpdTextX, page.headerYmm + 18.2, 'F2', 6.8, PDF_COLORS.lgpdFg);
     }
   } else {
+    const emissionText = `Emissão: ${model.emittedDisplayBr}  •  ${pageIndicatorText}`;
+    const emissionFontPt = 7.2;
+    const emissionWidthMm = measureAfmWidthMm(emissionText, emissionFontPt, 'Helvetica');
+    const emissionXMm = Math.max(x0 + w * 0.52, headerRightEdgeMm - emissionWidthMm);
+    const contTitleRaw = `${model.unitTitle} — FOLHA DE CONTINUAÇÃO`;
+    const contTitleMaxWidthMm = Math.max(40, emissionXMm - headerLeftXMm - 3.5);
+    const contTitleFit = solveTextBoxAutoFit(contTitleRaw, contTitleMaxWidthMm, 5.0, {
+      maxFontPt: 9.0,
+      minFontPt: 6.5,
+      font: 'Helvetica-Bold',
+      maxLinesOverride: 1,
+    });
     drawTextMm(
-      `${model.unitTitle} — FOLHA DE CONTINUAÇÃO`,
-      x0 + 5,
+      contTitleFit.lines[0] ?? contTitleRaw,
+      headerLeftXMm,
       page.headerYmm + 6.8,
       'F2',
-      9.0,
+      contTitleFit.fontSizePt,
       PDF_COLORS.white
     );
     drawTextMm(
-      `Emissão: ${model.emittedDisplayBr}  •  ${pageIndicatorText}`,
-      x0 + w - 72,
+      emissionText,
+      emissionXMm,
       page.headerYmm + 6.8,
       'F1',
-      7.2,
+      emissionFontPt,
       PDF_COLORS.white
     );
+
+    const contSummaryRaw = `Total: ${model.summary.total} (Pres.: ${model.summary.presentes} | Cob.: ${model.summary.coberturas} | Faltas: ${model.summary.faltas} | Folgas: ${model.summary.folgas})`;
+    const contSummaryMaxWidthMm = Math.max(
+      40,
+      (model.privacyMode ? lgpdBadgeX - 3.5 : headerRightEdgeMm) - headerLeftXMm
+    );
+    const contSummaryFit = solveTextBoxAutoFit(contSummaryRaw, contSummaryMaxWidthMm, 4.5, {
+      maxFontPt: 7.5,
+      minFontPt: 6.5,
+      font: 'Helvetica',
+      maxLinesOverride: 1,
+    });
     drawTextMm(
-      `Total: ${model.summary.total} (Pres.: ${model.summary.presentes} | Cob.: ${model.summary.coberturas} | Faltas: ${model.summary.faltas} | Folgas: ${model.summary.folgas})`,
-      x0 + 5,
+      contSummaryFit.lines[0] ?? contSummaryRaw,
+      headerLeftXMm,
       page.headerYmm + 14.6,
       'F1',
-      7.5,
+      contSummaryFit.fontSizePt,
       [0.85, 0.9, 0.95]
     );
+
     if (model.privacyMode) {
       strokeAndFillRectMm(
-        x0 + w - 58,
+        lgpdBadgeX,
         page.headerYmm + 9.8,
-        54,
+        lgpdBadgeW,
         6.4,
         PDF_COLORS.lgpdBg,
         PDF_COLORS.lgpdFg,
         0.6
       );
-      drawTextMm(
-        'MODO MURAL PÚBLICO LGPD',
-        x0 + w - 55,
-        page.headerYmm + 14.2,
-        'F2',
-        6.6,
-        PDF_COLORS.lgpdFg
-      );
+      const lgpdText = 'MODO MURAL PÚBLICO LGPD';
+      const lgpdTextW = measureAfmWidthMm(lgpdText, 6.6, 'Helvetica-Bold');
+      const lgpdTextX = lgpdBadgeX + Math.max(1.5, (lgpdBadgeW - lgpdTextW) / 2);
+      drawTextMm(lgpdText, lgpdTextX, page.headerYmm + 14.2, 'F2', 6.6, PDF_COLORS.lgpdFg);
     }
   }
 
@@ -1493,12 +1566,18 @@ function renderPageContentStream(model: A4ScheduleDocumentModel, page: A4PageDis
   );
 
   for (const col of model.columns) {
+    const colLabelFit = solveTextBoxAutoFit(col.label.toUpperCase(), col.widthMm - 2.4, 4.5, {
+      maxFontPt: 7.2,
+      minFontPt: 6.5,
+      font: 'Helvetica-Bold',
+      maxLinesOverride: 1,
+    });
     drawTextMm(
-      col.label.toUpperCase(),
-      col.xMm + 1.8,
+      colLabelFit.lines[0] ?? col.label.toUpperCase(),
+      col.xMm + 1.4,
       page.tableHeaderYmm + 4.9,
       'F2',
-      7.2,
+      colLabelFit.fontSizePt,
       PDF_COLORS.inkDark
     );
   }
@@ -1598,8 +1677,8 @@ function renderPageContentStream(model: A4ScheduleDocumentModel, page: A4PageDis
 
   const sigBoxWidthMm = Math.min(78, w * 0.42);
   const sigBoxXMm = x0 + 4;
-  const sigBoxYMm = page.footerYmm + 2.0;
-  const sigBoxHeightMm = 11.5;
+  const sigBoxYMm = page.footerYmm + 1.8;
+  const sigBoxHeightMm = 10.0;
 
   if (model.signature !== null) {
     ops.push(
@@ -1618,38 +1697,72 @@ function renderPageContentStream(model: A4ScheduleDocumentModel, page: A4PageDis
     );
   }
 
-  const sigLineY = page.footerYmm + 14.2;
+  const sigLineY = page.footerYmm + 12.5;
   drawHLineMm(sigBoxXMm, sigBoxXMm + sigBoxWidthMm, sigLineY, PDF_COLORS.slateBorder, 0.65);
   const caption =
     model.signerLabel.length > 0
       ? `Coordenação / Responsável: ${model.signerLabel}`
       : 'Assinatura / Carimbo da Coordenação de Enfermagem';
-  drawTextMm(caption, sigBoxXMm, page.footerYmm + 18.0, 'F2', 6.8, PDF_COLORS.inkDark);
+  const captionFit = solveTextBoxAutoFit(caption, sigBoxWidthMm, 6.2, {
+    maxFontPt: 6.8,
+    minFontPt: 6.5,
+    font: 'Helvetica-Bold',
+    maxLinesOverride: 2,
+  });
+  for (let lineIdx = 0; lineIdx < captionFit.lines.length; lineIdx += 1) {
+    drawTextMm(
+      captionFit.lines[lineIdx]!,
+      sigBoxXMm,
+      page.footerYmm + 15.5 + lineIdx * 2.8,
+      'F2',
+      captionFit.fontSizePt,
+      PDF_COLORS.inkDark
+    );
+  }
   drawTextMm(
     model.signature !== null ? 'Rubrica vetorial sigv1 registrada' : 'Espaço para rubrica física',
     sigBoxXMm,
-    page.footerYmm + 21.4,
+    page.footerYmm + 21.5,
     'F1',
     6.5,
     PDF_COLORS.inkMuted
   );
 
   const auditX = sigBoxXMm + sigBoxWidthMm + 6;
-  drawTextMm(
+  const auditMaxWidthMm = Math.max(40, x0 + w - auditX - 3.5);
+  const auditHeadingFit = solveTextBoxAutoFit(
     `SELO DE INTEGRIDADE SHA-256 • ${pageIndicatorText}`,
+    auditMaxWidthMm,
+    4.2,
+    {
+      maxFontPt: 6.8,
+      minFontPt: 6.5,
+      font: 'Helvetica-Bold',
+      maxLinesOverride: 1,
+    }
+  );
+  drawTextMm(
+    auditHeadingFit.lines[0] ?? `SELO DE INTEGRIDADE SHA-256 • ${pageIndicatorText}`,
     auditX,
     page.footerYmm + 6.4,
     'F2',
-    6.8,
+    auditHeadingFit.fontSizePt,
     PDF_COLORS.inkDark
   );
-  drawTextMm(model.sha256Hex, auditX, page.footerYmm + 11.2, 'F3', 6.5, PDF_COLORS.inkMuted);
+  drawTextMm(model.sha256Hex, auditX, page.footerYmm + 11.4, 'F3', 6.5, PDF_COLORS.inkMuted);
+  const auditMetaRaw = `Emitido em ${model.emittedDisplayBr} • PDF 1.4 Vetorial ISO 32000-1 (100% Local-First)`;
+  const auditMetaFit = solveTextBoxAutoFit(auditMetaRaw, auditMaxWidthMm, 4.2, {
+    maxFontPt: 6.5,
+    minFontPt: 6.5,
+    font: 'Helvetica',
+    maxLinesOverride: 1,
+  });
   drawTextMm(
-    `Emitido em ${model.emittedDisplayBr} • PDF 1.4 Vetorial ISO 32000-1 (100% Local-First)`,
+    auditMetaFit.lines[0] ?? auditMetaRaw,
     auditX,
-    page.footerYmm + 16.4,
+    page.footerYmm + 16.6,
     'F1',
-    6.5,
+    auditMetaFit.fontSizePt,
     PDF_COLORS.inkMuted
   );
 

@@ -173,7 +173,7 @@ export const styles = {
 
   downloadPrimaryButton: {
     gap: 0.75,
-    minHeight: '38px',
+    minHeight: { xs: '44px', sm: '38px' },
     px: 1.75,
     py: 0.75,
     fontSize: '12.5px',
@@ -191,7 +191,7 @@ export const styles = {
 
   printSecondaryButton: {
     gap: 0.75,
-    minHeight: '38px',
+    minHeight: { xs: '44px', sm: '38px' },
     px: 1.5,
     py: 0.75,
     fontSize: '12.5px',
@@ -215,12 +215,16 @@ export const styles = {
     const tok = active ? MODAL_FOLHA_A4_TOKENS.toggleActive : MODAL_FOLHA_A4_TOKENS.toggleIdle;
     return {
       gap: 0.65,
-      minHeight: '34px',
+      minHeight: { xs: '44px', sm: '36px' },
       px: 1.25,
       py: 0.5,
       fontSize: '12px',
       fontWeight: 600,
       boxShadow: 'none',
+      transition: 'box-shadow 0.15s ease-in-out',
+      '@media (prefers-reduced-motion: reduce)': {
+        transition: 'none',
+      },
       bgcolor: tok.bg,
       color: tok.fg,
       borderColor: tok.border,

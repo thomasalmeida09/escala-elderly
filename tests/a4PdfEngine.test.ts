@@ -521,6 +521,14 @@ describe('FE #4 — ISO 32000-1 Deterministic A4 Vector PDF Engine & sigv1 Signa
       )
     ).toThrow(VectorSignatureError);
 
+    // S14b: Compact 1-digit coordinates (< MAX_SIGV1_LENGTH = 4096) exercise MAX_SIGV1_VERTICES directly
+    const compactVerticesPayload = `sigv1:1000x300:${Array.from(
+      { length: MAX_SIGV1_VERTICES + 5 },
+      (_, i) => `${i % 9},${(i + 1) % 9}`
+    ).join(';')}`;
+    expect(compactVerticesPayload.length).toBeLessThan(MAX_SIGV1_LENGTH);
+    expect(() => parseSigV1(compactVerticesPayload)).toThrow(VectorSignatureError);
+
     const tooManyVerticesPayload = `sigv1:1000x300:${Array.from(
       { length: MAX_SIGV1_VERTICES + 5 },
       (_, i) => `${i % 900},${i % 250}`
@@ -621,5 +629,105 @@ describe('FE #4 — ISO 32000-1 Deterministic A4 Vector PDF Engine & sigv1 Signa
     cleanup(); // Idempotent second call
     expect(attrs.has('data-a4-sheet-print')).toBe(false);
     expect(elements.has('runtime-page-geometry')).toBe(false);
+  });
+
+  it('9. enforces AFM geometric non-overlap and right-margin confinement across all pages 1..N in Portrait & Landscape under 80-char signerLabel and LGPD mode (S22, BLK-01, BLK-02)', () => {
+    const longSignerLabel =
+      'Dra. Helena Prado de Albuquerque — COREN-SP 000100 — Coordenação Geral Noturna';
+    expect(longSignerLabel.length).toBeGreaterThanOrEqual(78);
+
+    const fontMap = {
+      F1: 'Helvetica',
+      F2: 'Helvetica-Bold',
+      F3: 'Courier',
+    } as const;
+
+    const assertZeroStreamCollisions = (
+      orientation: 'portrait' | 'landscape',
+      privacyMode: boolean,
+      unitTitle?: string
+    ): void => {
+      const dim = getA4PageDimensions(orientation);
+      const synthSig = synthesizeKeyboardVectorSignature(longSignerLabel);
+      expect(synthSig).not.toBeNull();
+      const model = buildA4ScheduleDocumentModel(buildSyntheticRoster(35), {
+        orientation,
+        privacyMode,
+        signerLabel: longSignerLabel,
+        signaturePayload: synthSig!.serialized,
+        emittedAtIso: '2026-11-11T03:00:00.000Z',
+        ...(unitTitle !== undefined ? { unitTitle } : {}),
+      });
+      expect(model.pages.length).toBeGreaterThanOrEqual(2);
+
+      const pdfAscii = asciiSlice(compileSchedulePdfBytes(model), 0);
+      const streamBlocks = [...pdfAscii.matchAll(/stream\n([\s\S]*?)\nendstream/g)].map(
+        (m) => m[1]!
+      );
+      expect(streamBlocks).toHaveLength(model.pages.length);
+
+      for (let pageIdx = 0; pageIdx < streamBlocks.length; pageIdx += 1) {
+        const stream = streamBlocks[pageIdx]!;
+        const btRegex =
+          /BT \/(F1|F2|F3) (\d+\.\d+) Tf [^\n]+? 1 0 0 1 (\d+\.\d+) (\d+\.\d+) Tm (\((?:\\.|[^\\()])*\)) Tj ET/g;
+        const boxes: Array<{
+          readonly text: string;
+          readonly xStartMm: number;
+          readonly xEndMm: number;
+          readonly yBaselineMm: number;
+          readonly capHeightMm: number;
+        }> = [];
+
+        for (const match of stream.matchAll(btRegex)) {
+          const alias = match[1] as 'F1' | 'F2' | 'F3';
+          const fontSizePt = Number.parseFloat(match[2]!);
+          const xPt = Number.parseFloat(match[3]!);
+          const yPt = Number.parseFloat(match[4]!);
+          const text = decodePdfWinAnsiLiteral(match[5]!);
+          const xStartMm = xPt / PT_PER_MM;
+          const yBaselineMm = dim.heightMm - yPt / PT_PER_MM;
+          const widthMm = measureAfmWidthMm(text, fontSizePt, fontMap[alias]);
+          const xEndMm = xStartMm + widthMm;
+          const capHeightMm = (fontSizePt / PT_PER_MM) * 0.72;
+
+          expect(
+            xStartMm,
+            `Page ${pageIdx + 1} (${orientation}) left overflow on "${text}"`
+          ).toBeGreaterThanOrEqual(9.9);
+          expect(
+            xEndMm,
+            `Page ${pageIdx + 1} (${orientation}) right margin overflow on "${text}" (xEnd=${xEndMm.toFixed(2)}mm)`
+          ).toBeLessThanOrEqual(dim.widthMm - 9.9);
+
+          boxes.push({ text, xStartMm, xEndMm, yBaselineMm, capHeightMm });
+        }
+
+        expect(boxes.length).toBeGreaterThan(20);
+
+        for (let i = 0; i < boxes.length; i += 1) {
+          for (let j = i + 1; j < boxes.length; j += 1) {
+            const a = boxes[i]!;
+            const b = boxes[j]!;
+            const verticalBandMm = Math.max(a.capHeightMm, b.capHeightMm) * 0.9;
+            if (Math.abs(a.yBaselineMm - b.yBaselineMm) < verticalBandMm) {
+              const overlapMm = Math.min(a.xEndMm, b.xEndMm) - Math.max(a.xStartMm, b.xStartMm);
+              expect(
+                overlapMm,
+                `Horizontal PDF text collision (${overlapMm.toFixed(2)}mm) on Page ${pageIdx + 1} (${orientation}) between "${a.text}" [${a.xStartMm.toFixed(2)}..${a.xEndMm.toFixed(2)}] and "${b.text}" [${b.xStartMm.toFixed(2)}..${b.xEndMm.toFixed(2)}]`
+              ).toBeLessThanOrEqual(0);
+            }
+          }
+        }
+      }
+    };
+
+    assertZeroStreamCollisions('portrait', true);
+    assertZeroStreamCollisions('portrait', false);
+    assertZeroStreamCollisions('landscape', true);
+    assertZeroStreamCollisions(
+      'portrait',
+      true,
+      'UNIDADE GERIÁTRICA SÃO LUCAS — ALA HOSPITALAR INTENSIVA DE RETAGUARDA ASSISTENCIAL 24H'
+    );
   });
 });
