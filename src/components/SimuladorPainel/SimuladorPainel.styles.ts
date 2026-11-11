@@ -46,7 +46,7 @@ export const styles = {
     '&:hover': {
       bgcolor: 'primary.dark',
     },
-    '&:focus-visible': {
+    '&:focus-visible, &.Mui-focusVisible': {
       outline: '2px solid #005C5A',
       outlineOffset: '2px',
     },
@@ -66,7 +66,7 @@ export const styles = {
       borderColor: 'primary.dark',
       boxShadow: 'none',
     },
-    '&:focus-visible': {
+    '&:focus-visible, &.Mui-focusVisible': {
       outline: '2px solid #005C5A',
       outlineOffset: '2px',
     },

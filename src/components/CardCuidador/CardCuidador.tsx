@@ -1,3 +1,4 @@
+import type { Ref } from 'react';
 import { Box, ButtonBase } from '@mui/material';
 import Text from '../common/Text';
 import { styles } from './CardCuidador.styles';
@@ -6,6 +7,7 @@ import type { Cuidador } from '../../hooks/useCaregivers';
 export interface CardCuidadorProps {
   readonly cuidador: Cuidador;
   readonly onToggleStatus?: (id: number) => void;
+  readonly buttonRef?: Ref<HTMLButtonElement>;
 }
 
 function buildAccessibleCardLabel(cuidador: Cuidador, interactive: boolean): string {
@@ -20,13 +22,14 @@ function buildAccessibleCardLabel(cuidador: Cuidador, interactive: boolean): str
   return `${cuidador.nome} — ${details} — ${statusSegment}${actionHint}`;
 }
 
-export default function CardCuidador({ cuidador, onToggleStatus }: CardCuidadorProps) {
+export default function CardCuidador({ cuidador, onToggleStatus, buttonRef }: CardCuidadorProps) {
   const formattedId = `ID: #${cuidador.id.toString().padStart(3, '0')}`;
   const metaParts = [formattedId, cuidador.quarto, cuidador.turno].filter(Boolean);
   const accessibleLabel = buildAccessibleCardLabel(cuidador, Boolean(onToggleStatus));
 
   return (
     <ButtonBase
+      ref={buttonRef}
       component="button"
       type="button"
       disableRipple

@@ -50,7 +50,7 @@ export const styles = {
       transform: 'translateY(-3px)',
       boxShadow: '0px 12px 30px rgba(45, 49, 46, 0.08)',
     },
-    '&:focus-visible': {
+    '&:focus-visible, &.Mui-focusVisible': {
       outline: '2px solid #005C5A',
       outlineOffset: '2px',
     },

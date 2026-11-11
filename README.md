@@ -65,6 +65,9 @@ escala-elderly/
 │   │   ├── CardCuidador/
 │   │   │   ├── CardCuidador.tsx                 # Card individual de status do cuidador
 │   │   │   └── CardCuidador.styles.ts           # Estilos isolados do CardCuidador
+│   │   ├── PainelCobertura/
+│   │   │   ├── PainelCobertura.tsx              # Painel irmão de triagem CLT (>=11h) e WhatsApp wa.me
+│   │   │   └── PainelCobertura.styles.ts        # Tokens WCAG 2.2 AA e estilos responsivos de cobertura
 │   │   ├── SimuladorPainel/
 │   │   │   ├── SimuladorPainel.tsx              # Painel de controle para simulação de alertas
 │   │   │   └── SimuladorPainel.styles.ts        # Estilos isolados do SimuladorPainel

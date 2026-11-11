@@ -63,6 +63,7 @@ export const styles = {
     return {
       display: 'inline-flex',
       alignItems: 'center',
+      columnGap: 0.5,
       maxWidth: '100%',
       bgcolor: token.bg,
       color: token.fg,
@@ -82,5 +83,12 @@ export const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: 2,
+  } as SxProps<Theme>,
+
+  cardSlot: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 0.75,
+    minWidth: 0,
   } as SxProps<Theme>,
 };
