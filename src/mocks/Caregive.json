@@ -1,6 +1,30 @@
 [
-  { "id": 1, "nome": "Ana Souza", "status": "Presente" },
-  { "id": 2, "nome": "Lucas Lima", "status": "Presente" },
-  { "id": 3, "nome": "Carlos Rocha", "status": "Presente" },
-  { "id": 4, "nome": "Mariana Costa", "status": "Presente" }
+  {
+    "id": 1,
+    "nome": "Ana Souza",
+    "status": "Presente",
+    "turno": "Diurno (07h-19h)",
+    "quarto": "Quarto 01"
+  },
+  {
+    "id": 2,
+    "nome": "Lucas Lima",
+    "status": "Presente",
+    "turno": "Diurno (07h-19h)",
+    "quarto": "Quarto 02"
+  },
+  {
+    "id": 3,
+    "nome": "Carlos Rocha",
+    "status": "Presente",
+    "turno": "Noturno (19h-07h)",
+    "quarto": "Quarto 03"
+  },
+  {
+    "id": 4,
+    "nome": "Mariana Costa",
+    "status": "Presente",
+    "turno": "Noturno (19h-07h)",
+    "quarto": "Quarto 04"
+  }
 ]
