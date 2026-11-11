@@ -4,27 +4,35 @@
     "nome": "Ana Souza",
     "status": "Presente",
     "turno": "Diurno (07h-19h)",
-    "quarto": "Quarto 01"
+    "quarto": "Quarto 01",
+    "telefone": "+55 11 90000-0101",
+    "horasDescanso": 24
   },
   {
     "id": 2,
     "nome": "Lucas Lima",
     "status": "Presente",
     "turno": "Diurno (07h-19h)",
-    "quarto": "Quarto 02"
+    "quarto": "Quarto 02",
+    "telefone": "+55 11 90000-0102",
+    "horasDescanso": 24
   },
   {
     "id": 3,
     "nome": "Carlos Rocha",
     "status": "Presente",
     "turno": "Noturno (19h-07h)",
-    "quarto": "Quarto 03"
+    "quarto": "Quarto 03",
+    "telefone": "+55 11 90000-0103",
+    "horasDescanso": 24
   },
   {
     "id": 4,
     "nome": "Mariana Costa",
     "status": "Presente",
     "turno": "Noturno (19h-07h)",
-    "quarto": "Quarto 04"
+    "quarto": "Quarto 04",
+    "telefone": "+55 11 90000-0104",
+    "horasDescanso": 24
   }
 ]

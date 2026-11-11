@@ -80,6 +80,7 @@ escala-elderly/
 │   ├── services/
 │   │   ├── caregiverApi.ts                      # Cliente HTTP nativo (fetch + timeout 2.5s + AbortController)
 │   │   ├── caregiverSyncController.ts           # Máquina de sincronização híbrida Local-First <-> Spring Boot
+│   │   ├── coverageEngine.ts                    # Motor determinístico de cobertura CLT (>=11h) e WhatsApp wa.me
 │   │   └── localFirstStore.ts                   # Persistência síncrona 0ms (escala_elderly:schedule:v1)
 │   ├── theme/
 │   │   └── theme.ts                             # Tokens visuais do tema "warmCareTheme" (MUI)
@@ -91,7 +92,8 @@ escala-elderly/
 ├── tests/
 │   ├── dashboardUiContract.test.tsx             # Suíte SSR de semântica HTML5, WCAG 2.2 AA e StrictMode
 │   ├── governanceHygiene.test.ts                # Fitness Functions de CI, ADRs, Árvore e Clean-Room/LGPD
-│   └── localFirstSync.test.ts                   # Suíte unitária de contrato, Local-First Store e concorrência API
+│   ├── localFirstSync.test.ts                   # Suíte unitária de contrato, Local-First Store e concorrência API
+│   └── smartCoverage.test.ts                    # Suíte unitária de elegibilidade CLT Art. 66, wa.me e alocação
 ├── .editorconfig                                # Padrão UTF-8 sem BOM e quebras de linha LF
 ├── .gitattributes                               # Normalização determinística de LF no Git
 ├── .gitignore                                   # Exclusão de artefatos de build, .env e lockfiles externos

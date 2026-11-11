@@ -189,6 +189,8 @@ describe('FE #2 — Canonical Caregiver Contract, Local-First Store & Hybrid Syn
         status: 'Presente',
         turno: 'Noturno (19h-07h)',
         quarto: 'Quarto 03',
+        telefone: '+55 11 90000-0103',
+        horasDescanso: 24,
       });
 
       const mutated = cold.cuidadores.map((c) =>
