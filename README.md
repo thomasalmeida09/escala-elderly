@@ -5,7 +5,7 @@
 ![Vite](https://img.shields.io/badge/Vite-8.1-646CFF?logo=vite&logoColor=white)
 ![Vitest](https://img.shields.io/badge/Vitest-5.1-6E9F18?logo=vitest&logoColor=white)
 ![MUI](https://img.shields.io/badge/Material_UI-v9_Warm_Care-007A78?logo=mui&logoColor=white)
-![Status](<https://img.shields.io/badge/Status-Sprint_2_(MVP_Core)-007A78>)
+![Status](<https://img.shields.io/badge/Status-Sprint_3_(Inteligencia_&_LGPD)-007A78>)
 
 Sistema web de monitoramento e gestão inteligente de escalas de cuidadores para **Instituições de Longa Permanência para Idosos (ILPIs)**, clínicas geriátricas e operações de **Home Care**.
 
@@ -18,7 +18,7 @@ Sistema web de monitoramento e gestão inteligente de escalas de cuidadores para
 | 📊 **Quadro Kanban Interativo**               | **[GitHub Projects (Front + Back)](https://github.com/users/augustoheiss/projects/1)**    | Quadro unificado com o status em tempo real de todas as tarefas da equipe     |
 | 🖼️ **Mapa Visual da Arquitetura (PR Lens)**   | **[Canvas Técnico & ADRs (`prlens.dev`)](https://prlens.dev/c/L-2rShWu_j0WpKt-jT0Cog)**   | Diagramas animados de arquitetura, _blast radius_ das Sprints e payloads JSON |
 | 👶 **Explicação Passo a Passo (ELI5 Canvas)** | **[Walkthrough Onboarding (`prlens.dev`)](https://prlens.dev/c/x2StISYcAmXvy49MhetrsQ)**  | Tour visual progressivo de como o sistema resolve uma falta no plantão        |
-| 🏛️ **Catálogo de ADRs do Frontend**           | **[`docs/adr/README.md`](./docs/adr/README.md)**                                          | Decisões arquiteturais já tomadas (`ADR-FE-001` a `ADR-FE-014`) e governança  |
+| 🏛️ **Catálogo de ADRs do Frontend**           | **[`docs/adr/README.md`](./docs/adr/README.md)**                                          | Decisões arquiteturais já tomadas (`ADR-FE-001` a `ADR-FE-015`) e governança  |
 | 🗺️ **Divisão por Sprints e Colunas**          | **[`docs/adr/QUADRO-KANBAN-SPRINTS.md`](./docs/adr/QUADRO-KANBAN-SPRINTS.md)**            | Mapa completo das 14 Issues distribuídas entre as Sprints 1, 2 e 3            |
 | ☕ **Repositório Backend (API Java)**         | **[`escala-elderly-backend`](https://github.com/thomasalmeida09/escala-elderly-backend)** | API REST em Java 17 + Spring Boot 4.1 que alimenta este painel                |
 
@@ -41,6 +41,7 @@ O **Escala Elderly** substitui o controle em papel por um **Painel do Gerente** 
 - **Cobertura Inteligente CLT & Acionamento WhatsApp (`ADR-FE-012`):** Ao registrar `"Faltou"`, o painel sugere imediatamente os folguistas elegíveis (intervalo interjornada `>= 11h` do Art. 66 da CLT e zero conflito de plantão), com convocação em 1 clique via `wa.me` (custo R$ 0 e minimização LGPD) e confirmação instantânea da substituição.
 - **Importação/Exportação Rápida CSV/Excel & Backup com Rollback (`ADR-FE-013`):** Preenchimento em `< 1s` via seletor de arquivo, _Drag-and-Drop_ ou `Ctrl+V` direto do Excel (auto-cura `;`/`\t`/`,`, `UTF-8`/`Windows-1252` e blindagem OWASP anti-CSV Injection), exportação com `UTF-8 BOM` pronta para Excel e reversão transacional em 1 clique (`Desfazer Importação` em `escala_elderly:undo_backup:v1`).
 - **Exportação PDF A4 Vetorial & Estúdio de Mural (`ADR-FE-014`):** Geração 100% vetorial ISO 32000-1 (`%PDF-1.4`, `0` dependências externas, acentuação `WinAnsiEncoding` completa e selo `SHA-256` síncrono) e pré-visualização `SheetCanvas` 1:1 com paginação dinâmica `1/N` sem páginas brancas fantasmas, alternância Retrato/Paisagem, rubrica vetorial `sigv1:` (toque/mouse/teclado `WCAG 2.1.1`) e **Modo Mural Público LGPD**.
+- **KPIs Operacionais & Termômetro de Economia Financeira (`ADR-FE-015`):** Faixa executiva no topo do painel com contadores estratificados anti-Paradoxo de Simpson (`Presentes` titulares vs. `Coberturas`, excluindo `Folga` do denominador), alertas imediatos de `Faltas` e termômetro linear determinístico em centavos inteiros (`+R$ 125,00` economizados por cobertura interna planejada frente ao sobrecusto emergencial de `R$ 315,00`), pronto para mascaramento LGPD (`R$ •••,••`).
 - **Arquitetura Resiliente (Local-First + REST API):** Hidratação síncrona em `0ms` via `localStorage` (`escala_elderly:schedule:v1`) sincronizada automaticamente aos endpoints `GET`, `PATCH`, `POST /batch` e `POST /reset` da API Spring Boot com fallback offline transparente (`MODO LOCAL-FIRST`).
 
 ---
@@ -55,11 +56,11 @@ escala-elderly/
 │   ├── workflows/
 │   │   └── ci.yml                               # Pipeline CI Dual-Job Node 24 (Build/Lint/Vitest/Budget & LGPD Gate)
 │   ├── CODEOWNERS                               # Roteamento automático de Code Review (@thomasalmeida09 @augustoheiss)
-│   ├── pull_request_template.md                 # Checklist de governança alinhado às ADRs (ADR-FE-001..014)
+│   ├── pull_request_template.md                 # Checklist de governança alinhado às ADRs (ADR-FE-001..015)
 │   └── ruleset-main-protection.json             # Definição auditável de proteção da branch main
 ├── docs/
 │   └── adr/
-│       ├── README.md                            # Catálogo oficial de ADRs (ADR-FE-001 a ADR-FE-014)
+│       ├── README.md                            # Catálogo oficial de ADRs (ADR-FE-001 a ADR-FE-015)
 │       └── QUADRO-KANBAN-SPRINTS.md             # Divisão das Issues por Sprints e Colunas
 ├── public/
 │   └── favicon.svg                              # Ícone vetorial da aplicação
