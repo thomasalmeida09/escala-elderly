@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { Box, Container } from '@mui/material';
+import BarraIndicadores from '../components/BarraIndicadores/BarraIndicadores';
 import BarraPlanilha from '../components/BarraPlanilha/BarraPlanilha';
 import CardCuidador from '../components/CardCuidador/CardCuidador';
 import PainelCobertura from '../components/PainelCobertura/PainelCobertura';
@@ -73,6 +74,9 @@ export default function Dashboard({ controllerOptions }: DashboardProps = {}) {
             </Box>
           </Box>
         </Box>
+
+        {/* Resumo Executivo Operacional (KPIs) e Termômetro de Economia Financeira */}
+        <BarraIndicadores cuidadores={cuidadores} />
 
         {/* Simulador e Restauração da Escala */}
         <SimuladorPainel onSimulate={simularFaltaDoCarlos} onReset={handleResetSchedule} />

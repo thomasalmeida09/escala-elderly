@@ -4,6 +4,11 @@ import { fileURLToPath } from 'node:url';
 import { ThemeProvider } from '@mui/material';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import BarraIndicadores from '../src/components/BarraIndicadores/BarraIndicadores';
+import {
+  BARRA_INDICADORES_TOKENS,
+  styles as barraIndicadoresStyles,
+} from '../src/components/BarraIndicadores/BarraIndicadores.styles';
 import BarraPlanilha from '../src/components/BarraPlanilha/BarraPlanilha';
 import {
   BARRA_PLANILHA_TOKENS,
@@ -315,6 +320,52 @@ describe('FE #2 & FE #7 — Dashboard, CardCuidador & PainelCobertura SSR Semant
     // Focus-visible outline (#005C5A) against Warm Care canvas (#F9F8F6) & card paper (#FFFFFF) >= 3:1 (WCAG 1.4.11)
     expect(wcagContrastRatio('#005C5A', '#F9F8F6')).toBeGreaterThanOrEqual(7.0);
     expect(wcagContrastRatio('#005C5A', '#FFFFFF')).toBeGreaterThanOrEqual(7.0);
+
+    // S14: Exhaustive WCAG 2.2 AA verification across 100% of BARRA_INDICADORES_TOKENS (1.4.3 >= 4.5:1 & 1.4.11 >= 3.0:1)
+    expect(
+      wcagContrastRatio(BARRA_INDICADORES_TOKENS.surface.fg, BARRA_INDICADORES_TOKENS.surface.bg)
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(
+      wcagContrastRatio(
+        BARRA_INDICADORES_TOKENS.sectionTitle.fg,
+        BARRA_INDICADORES_TOKENS.sectionTitle.bg
+      )
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(
+      wcagContrastRatio(
+        BARRA_INDICADORES_TOKENS.mutedText.fg,
+        BARRA_INDICADORES_TOKENS.mutedText.bg
+      )
+    ).toBeGreaterThanOrEqual(4.5);
+
+    for (const [toneKey, cardTok] of Object.entries(BARRA_INDICADORES_TOKENS.kpiCards)) {
+      expect(
+        wcagContrastRatio(cardTok.fg, cardTok.bg),
+        `BarraIndicadores kpiCards.${toneKey} text (${cardTok.fg} on ${cardTok.bg}) must exceed 4.5:1`
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(
+        wcagContrastRatio(cardTok.border, cardTok.bg),
+        `BarraIndicadores kpiCards.${toneKey} border (${cardTok.border} on ${cardTok.bg}) must exceed 3.0:1`
+      ).toBeGreaterThanOrEqual(3.0);
+    }
+
+    expect(
+      wcagContrastRatio(
+        BARRA_INDICADORES_TOKENS.thermometerTrack.border,
+        BARRA_INDICADORES_TOKENS.surface.bg
+      )
+    ).toBeGreaterThanOrEqual(3.0);
+
+    for (const [fillKey, fillTok] of Object.entries(BARRA_INDICADORES_TOKENS.thermometerFill)) {
+      expect(
+        wcagContrastRatio(fillTok.fill, fillTok.trackBg),
+        `BarraIndicadores thermometerFill.${fillKey} (${fillTok.fill} on ${fillTok.trackBg}) must exceed 3.0:1`
+      ).toBeGreaterThanOrEqual(3.0);
+      expect(
+        wcagContrastRatio(fillTok.textOnSurface, BARRA_INDICADORES_TOKENS.surface.bg),
+        `BarraIndicadores thermometerFill.${fillKey} status text (${fillTok.textOnSurface} on #FFFFFF) must exceed 4.5:1`
+      ).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it('4. renders sibling PainelCobertura (.no-print) on absence with valid HTML5 links, noopener noreferrer, WCAG 2.5.3 labels, and CLT filter note', () => {
@@ -683,7 +734,8 @@ describe('FE #2 & FE #7 — Dashboard, CardCuidador & PainelCobertura SSR Semant
 
     // MAJ-03 & IMP-05: Zero background-color transition flash on toggleChipButton + 44px mobile touch targets
     const activeChipStyle = modalFolhaA4Styles.toggleChipButton(true) as Record<string, unknown>;
-    expect(String(activeChipStyle.transition ?? '')).not.toContain('background-color');
+    expect(activeChipStyle.transition).toBeDefined();
+    expect(String(activeChipStyle.transition)).not.toContain('background-color');
     expect((activeChipStyle.minHeight as { xs?: string })?.xs).toBe('44px');
     expect(
       (
@@ -692,5 +744,105 @@ describe('FE #2 & FE #7 — Dashboard, CardCuidador & PainelCobertura SSR Semant
         }
       )?.xs
     ).toBe('44px');
+  });
+
+  it('9. renders BarraIndicadores (.no-print) above SimuladorPainel with WAI-ARIA progressbar, tabular nowrap numbers, mixed-state accounting, and zero LGPD ARIA leaks (FE #8)', () => {
+    const store = createLocalFirstStore({ storage: null });
+    const dashboardHtml = renderToStaticMarkup(
+      <ThemeProvider theme={warmCareTheme}>
+        <Dashboard controllerOptions={{ store, eventTarget: null }} />
+      </ThemeProvider>
+    );
+
+    // Hierarchy: DASHBOARD header -> BarraIndicadores -> SimuladorPainel ("Falta de Carlos")
+    const headerIdx = dashboardHtml.indexOf('DASHBOARD');
+    const kpiHeadingIdx = dashboardHtml.indexOf('barra-indicadores-heading');
+    const simuladorIdx = dashboardHtml.indexOf('Falta de Carlos');
+    expect(headerIdx).toBeGreaterThan(-1);
+    expect(kpiHeadingIdx).toBeGreaterThan(headerIdx);
+    expect(simuladorIdx).toBeGreaterThan(kpiHeadingIdx);
+
+    // Standalone BarraIndicadores SSR contract: .no-print, role="region", zero <section>, zero <a>, zero assertive live (S10, S11, S15)
+    const coveredAndAlertMixedRoster = getCanonicalSeed().map((item) => {
+      if (item.id === 2) {
+        return applyStatusChange(item, 'Cobertura', 'Beatriz Alves');
+      }
+      if (item.id === CARLOS_ROCHA_ID) {
+        return applyStatusChange(item, 'Faltou');
+      }
+      return item;
+    });
+
+    const mixedHtml = renderToStaticMarkup(
+      <ThemeProvider theme={warmCareTheme}>
+        <BarraIndicadores cuidadores={coveredAndAlertMixedRoster} />
+      </ThemeProvider>
+    );
+
+    expect(mixedHtml).toContain('no-print');
+    expect(mixedHtml).toContain('role="region"');
+    expect(mixedHtml).toContain('aria-labelledby="barra-indicadores-heading"');
+    expect(mixedHtml).not.toMatch(/<section\b/i);
+    expect(mixedHtml).not.toMatch(/<a\b/i);
+    expect(mixedHtml).not.toContain('aria-live="assertive"');
+
+    // WAI-ARIA 1.2 progressbar attributes + named polite status region (M4.3 / S15)
+    expect(mixedHtml).toContain('role="progressbar"');
+    expect(mixedHtml).toContain('aria-valuemin="0"');
+    expect(mixedHtml).toContain('aria-valuemax="100"');
+    expect(mixedHtml).toContain('aria-valuenow="75"');
+    expect(mixedHtml).toContain('aria-valuetext="75% dos postos assistidos');
+    expect(mixedHtml).toContain('aria-label="Resumo operacional do turno"');
+
+    // Mixed-state accounting truth (M1.2 / S06): preserves +R$ 125,00 realized savings AND surfaces Risco: R$ 125,00
+    expect(mixedHtml).toContain('3 Ativos');
+    expect(mixedHtml).toContain('2 tit. + 1 cob.');
+    expect(mixedHtml).toContain('1 Pendente');
+    expect(mixedHtml).toContain('+R$ 125,00');
+    expect(mixedHtml).toContain('Risco: R$ 125,00');
+
+    // Full LGPD privacyMode masking across DOM + ARIA tree (M3 / S09)
+    const maskedHtml = renderToStaticMarkup(
+      <ThemeProvider theme={warmCareTheme}>
+        <BarraIndicadores cuidadores={coveredAndAlertMixedRoster} privacyMode />
+      </ThemeProvider>
+    );
+    expect(maskedHtml).toContain('R$ •••,••');
+    expect(maskedHtml).toContain('Valores ocultos');
+    expect(maskedHtml).toContain('valores financeiros ocultos');
+    expect(maskedHtml).not.toContain('+R$');
+    expect(maskedHtml).not.toMatch(/125|190|315/);
+
+    // Style invariants: tabular-nums, nowrap (never overflowWrap: anywhere on numbers), 320px 2-column fallback, reduced-motion (S12, S18)
+    const kpiValueStyle = barraIndicadoresStyles.kpiValue as Record<string, unknown>;
+    expect(kpiValueStyle.fontFamily).toContain('JetBrains Mono');
+    expect(kpiValueStyle.fontVariantNumeric).toBe('tabular-nums');
+    expect(kpiValueStyle.whiteSpace).toBe('nowrap');
+    expect(kpiValueStyle.overflowWrap).toBeUndefined();
+
+    const kpiGridStyle = barraIndicadoresStyles.kpiGrid as Record<string, unknown>;
+    expect(kpiGridStyle['@media (max-width: 359.95px)']).toEqual({
+      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    });
+
+    const economiaCardStyle = barraIndicadoresStyles.kpiCard('optimal', true) as Record<
+      string,
+      unknown
+    >;
+    expect(economiaCardStyle['@media (max-width: 359.95px)']).toEqual({
+      gridColumn: '1 / -1',
+    });
+
+    const fillStyle = barraIndicadoresStyles.thermometerFill(75, 'alert') as Record<
+      string,
+      unknown
+    >;
+    expect(fillStyle.width).toBe('75%');
+    expect(fillStyle['@media (prefers-reduced-motion: reduce)']).toEqual({
+      transition: 'none',
+    });
+
+    // Unused-import guard check on barraPlanilhaStyles existing import
+    expect(barraPlanilhaStyles.actionsRow).toBeDefined();
   });
 });
