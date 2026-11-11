@@ -2,7 +2,7 @@
 
 > **Projeto:** Escala Elderly — Painel do Gerente & Gestão Inteligente de Escalas  
 > **Repositório:** [`escala-elderly`](https://github.com/thomasalmeida09/escala-elderly) (Frontend SPA)  
-> **Última Atualização:** 10 de Novembro de 2026
+> **Última Atualização:** 11 de Novembro de 2026
 
 Este documento registra as **Decisões Arquiteturais (ADRs)** do **Frontend**, divididas em **2 Grupos**:
 
@@ -216,3 +216,14 @@ Este documento registra as **Decisões Arquiteturais (ADRs)** do **Frontend**, d
   - Implementar em TypeScript puro (`0` dependências NPM extras) o motor `csvScheduleCodec.ts` com pipeline _Write-Audit-Publish_ tudo-ou-nada, limite anti-DoS pré-alocação (`1 MiB` em arquivo, `Uint8Array` e `string` colada; teto de `500` linhas), detecção de assinaturas mágicas binárias (`.xlsx`, `.xls`, `%PDF-`, `UTF-32`), auto-cura de codificação (`UTF-8`, `UTF-8 BOM`, `UTF-16LE/BE` e fallback automático `Windows-1252` para Excel em Português) e máquina de estados RFC 4180 com detecção automática de `;`, `\t` e `,` fora de aspas.
   - Aplicar defesa em profundidade **OWASP CSV Formula Injection** bloqueando células iniciadas por `=`, `+`, `-`, `@`, `\t` ou `\r` (brutos, após espaços, precedidos por `'` ou em linhas internas `Alt+Enter`) em campos textuais, combinada com gramática estrita E.164 em `telefone` e exportação `UTF-8 BOM` (`\uFEFF` restrito ao `Blob` em memória) na ordem canônica _OWASP Prefix $\rightarrow$ RFC 4180 Quote_, assegurando idempotência exata de backup (`import(export(escala)) === escala`) sem erros `#NOME?` nem truncamento científico no Excel.
   - Persistir snapshots transacionais de reversão em `escala_elderly:undo_backup:v1` antes de cada nova importação distinta (sobrevivendo ao `F5` e ao `reconcile()` contra `:8080`, com guarda anti-duplo-`Ctrl+V`, sincronização `POST /api/cuidadores/batch` e restauração de foco `WCAG 2.4.3` ao acionar `Desfazer Importação`).
+
+---
+
+### 🗳️ ADR-FE-014: Motor Determinístico de Exportação PDF A4 Vetorial (ISO 32000-1 %PDF-1.4), Estúdio SheetCanvas 1:1, Rubrica sigv1 e Modo Mural Público LGPD
+
+- **Status:** `ACEITA / IMPLEMENTADA`
+- **Onde está no código:** [`src/services/a4PdfScheduleEngine.ts`](../../src/services/a4PdfScheduleEngine.ts), [`src/services/vectorSignatureProtocol.ts`](../../src/services/vectorSignatureProtocol.ts), [`src/components/ModalFolhaEscalaA4/ModalFolhaEscalaA4.tsx`](../../src/components/ModalFolhaEscalaA4/ModalFolhaEscalaA4.tsx), [`src/components/ModalFolhaEscalaA4/ModalFolhaEscalaA4.styles.ts`](../../src/components/ModalFolhaEscalaA4/ModalFolhaEscalaA4.styles.ts), [`src/components/BarraPlanilha/BarraPlanilha.tsx`](../../src/components/BarraPlanilha/BarraPlanilha.tsx), [`src/index.css`](../../src/index.css), [`tests/a4PdfEngine.test.ts`](../../tests/a4PdfEngine.test.ts) e [`tests/dashboardUiContract.test.tsx`](../../tests/dashboardUiContract.test.tsx).
+- **Decisão:**
+  - Implementar em TypeScript puro (`0` dependências NPM extras; bundle gzip preservado abaixo do teto de `160 KiB`) o compilador binário `Uint8Array` ISO 32000-1 `%PDF-1.4` 100% vetorial (`0` imagens raster), declarando `/Encoding /WinAnsiEncoding` explícito nas fontes _Standard 14_ (`/Helvetica`, `/Helvetica-Bold`, `/Courier`), normalização `.normalize('NFC')` + mapa bidirecional CP1252 `0x80..0x9F` + escapes octais `\ddd` blindados contra injeção PostScript em `/Contents` e `/Info`, tabela `xref` de exatos `20` bytes por entrada sem desvio UTF-8 e selo criptográfico síncrono FIPS 180-4 `SHA-256` (`sha256HexSync`, independente de HTTPS/`crypto.subtle`).
+  - Compartilhar o modelo geométrico euclidiano unificado (`buildA4ScheduleDocumentModel` em `mm`, com _auto-fit_ tipográfico AFM de segurança `0.94`, piso `6.5pt` e paginação dinâmica `1/N` sem páginas brancas fantasmas em Retrato `210×297mm` e Paisagem `297×210mm`) 1:1 entre o compilador `.pdf` e o `<FolhaEscalaA4Document />`, isolando a impressão física via portal `#a4-print-sheet-host` + `@media print` imune ao `overflow: hidden` do `ModalManager` do MUI e à rasterização do _Skia Print Compositor_.
+  - Oferecer no `<ModalFolhaEscalaA4 />` zoom óptico responsivo sem overflow horizontal em `375×667` (`computeOpticalSheetScale` com piso `0.24` sobre a largura real da folha), protocolo vetorial `sigv1:` com simplificação Ramer-Douglas-Peucker (`PointerEvents` + síntese acessível por teclado `WCAG 2.1.1`) e **Modo Mural Público LGPD** que pseudonimiza tanto `cuidador.nome` quanto `cuidador.substituto` (ignorando partículas `da/de/do/das/dos/e`) e suprime 100% dos dígitos telefônicos.
