@@ -3,6 +3,7 @@ import {
   type Cuidador,
   applyStatusChange,
   nextOperationalStatus,
+  toBatchPayload,
 } from '../types/caregiver';
 import {
   CaregiverApiError,
@@ -24,6 +25,7 @@ export interface CaregiverScheduleSnapshot {
   readonly cuidadores: Cuidador[];
   readonly connectionStatus: ConnectionStatus;
   readonly pendingRemoteSync: boolean;
+  readonly canUndoImport: boolean;
 }
 
 export interface CaregiverScheduleControllerOptions {
@@ -41,6 +43,8 @@ export interface CaregiverScheduleController {
   toggleCaregiverStatus(id: number): Promise<void>;
   simulateCarlosAbsence(): Promise<void>;
   confirmCaregiverCoverage(absentCaregiverId: number, substituteName: string): Promise<void>;
+  importCaregiversBatch(cuidadores: readonly Cuidador[]): Promise<void>;
+  undoLastImport(): Promise<boolean>;
   resetSchedule(): Promise<void>;
 }
 
@@ -51,15 +55,40 @@ function resolveDefaultEventTarget(): ConnectivityEventTarget | null {
   return null;
 }
 
+function areCaregiverListsEqual(first: readonly Cuidador[], second: readonly Cuidador[]): boolean {
+  if (first.length !== second.length) {
+    return false;
+  }
+  for (let i = 0; i < first.length; i += 1) {
+    const a = first[i]!;
+    const b = second[i]!;
+    if (
+      a.id !== b.id ||
+      a.nome !== b.nome ||
+      a.status !== b.status ||
+      a.turno !== b.turno ||
+      a.quarto !== b.quarto ||
+      a.telefone !== b.telefone ||
+      a.horasDescanso !== b.horasDescanso ||
+      a.substituto !== b.substituto
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function createFrozenSnapshot(
   cuidadores: readonly Cuidador[],
   connectionStatus: ConnectionStatus,
-  pendingRemoteSync: boolean
+  pendingRemoteSync: boolean,
+  canUndoImport: boolean
 ): CaregiverScheduleSnapshot {
   return Object.freeze({
     cuidadores: [...cuidadores],
     connectionStatus,
     pendingRemoteSync,
+    canUndoImport,
   });
 }
 
@@ -71,12 +100,15 @@ export function createCaregiverScheduleController(
   const eventTarget =
     options.eventTarget !== undefined ? options.eventTarget : resolveDefaultEventTarget();
 
+  const hasUndoBackup = (): boolean => store.readUndoBackup() !== null;
+
   // Synchronous 0ms hydration on construction (zero artificial delay, zero CLS)
   const hydrated = store.readInitialState();
   let snapshot: CaregiverScheduleSnapshot = createFrozenSnapshot(
     hydrated.cuidadores,
     'checking',
-    hydrated.pendingRemoteSync
+    hydrated.pendingRemoteSync,
+    hasUndoBackup()
   );
 
   let fullBatchDirty = hydrated.pendingRemoteSync;
@@ -116,6 +148,36 @@ export function createCaregiverScheduleController(
     reconcileAbort = null;
   }
 
+  async function syncFullRosterBatch(
+    nextList: readonly Cuidador[],
+    myRevision: number
+  ): Promise<void> {
+    const batchController = new AbortController();
+    mutationBatchAbort = batchController;
+
+    try {
+      const syncedList = await api.syncCaregiversBatch(nextList, batchController.signal);
+      if (disposed || batchController.signal.aborted || revision !== myRevision) {
+        return;
+      }
+      fullBatchDirty = false;
+      dirtyCardIds.clear();
+      store.writeSnapshot(syncedList, false);
+      emit(createFrozenSnapshot(syncedList, 'online', false, hasUndoBackup()));
+    } catch (error) {
+      if (disposed || isAbortedApiError(error) || batchController.signal.aborted) {
+        return;
+      }
+      fullBatchDirty = true;
+      store.writeSnapshot(snapshot.cuidadores, true);
+      emit(createFrozenSnapshot(snapshot.cuidadores, 'local-first', true, hasUndoBackup()));
+    } finally {
+      if (mutationBatchAbort === batchController) {
+        mutationBatchAbort = null;
+      }
+    }
+  }
+
   async function reconcile(): Promise<void> {
     if (disposed) {
       return;
@@ -126,7 +188,14 @@ export function createCaregiverScheduleController(
     const localState = snapshot;
 
     if (localState.connectionStatus === 'local-first') {
-      emit(createFrozenSnapshot(localState.cuidadores, 'checking', localState.pendingRemoteSync));
+      emit(
+        createFrozenSnapshot(
+          localState.cuidadores,
+          'checking',
+          localState.pendingRemoteSync,
+          hasUndoBackup()
+        )
+      );
     }
 
     const controller = new AbortController();
@@ -141,7 +210,7 @@ export function createCaregiverScheduleController(
         fullBatchDirty = false;
         dirtyCardIds.clear();
         store.writeSnapshot(remoteList, false);
-        emit(createFrozenSnapshot(remoteList, 'online', false));
+        emit(createFrozenSnapshot(remoteList, 'online', false, hasUndoBackup()));
         return;
       }
 
@@ -152,7 +221,7 @@ export function createCaregiverScheduleController(
       fullBatchDirty = false;
       dirtyCardIds.clear();
       store.writeSnapshot(remoteList, false);
-      emit(createFrozenSnapshot(remoteList, 'online', false));
+      emit(createFrozenSnapshot(remoteList, 'online', false, hasUndoBackup()));
     } catch (error) {
       if (disposed || isAbortedApiError(error) || controller.signal.aborted) {
         return;
@@ -173,7 +242,7 @@ export function createCaregiverScheduleController(
           fullBatchDirty = false;
           dirtyCardIds.clear();
           store.writeSnapshot(recovered, false);
-          emit(createFrozenSnapshot(recovered, 'online', false));
+          emit(createFrozenSnapshot(recovered, 'online', false, hasUndoBackup()));
           return;
         } catch (recoveryError) {
           if (disposed || isAbortedApiError(recoveryError) || controller.signal.aborted) {
@@ -182,7 +251,14 @@ export function createCaregiverScheduleController(
         }
       }
 
-      emit(createFrozenSnapshot(snapshot.cuidadores, 'local-first', snapshot.pendingRemoteSync));
+      emit(
+        createFrozenSnapshot(
+          snapshot.cuidadores,
+          'local-first',
+          snapshot.pendingRemoteSync,
+          hasUndoBackup()
+        )
+      );
     } finally {
       if (reconcileAbort === controller) {
         reconcileAbort = null;
@@ -217,38 +293,14 @@ export function createCaregiverScheduleController(
       snapshot.connectionStatus === 'online' ? 'online' : snapshot.connectionStatus;
 
     store.writeSnapshot(nextList, true);
-    emit(createFrozenSnapshot(nextList, optimisticConnection, true));
+    emit(createFrozenSnapshot(nextList, optimisticConnection, true, hasUndoBackup()));
 
     const requiresFullBatchSync = fullBatchDirty || dirtyCardIds.size > 1;
 
     if (requiresFullBatchSync) {
       // M2.1 Anti-Clobbering: other cards or pre-reload edits are also unsynced -> push full snapshot!
       abortAllMutationRequests();
-      const batchController = new AbortController();
-      mutationBatchAbort = batchController;
-
-      try {
-        const syncedList = await api.syncCaregiversBatch(nextList, batchController.signal);
-        if (disposed || batchController.signal.aborted || revision !== myRevision) {
-          return;
-        }
-        fullBatchDirty = false;
-        dirtyCardIds.clear();
-        store.writeSnapshot(syncedList, false);
-        emit(createFrozenSnapshot(syncedList, 'online', false));
-      } catch (error) {
-        if (disposed || isAbortedApiError(error) || batchController.signal.aborted) {
-          return;
-        }
-        // M2.2: Any real network/timeout/5xx failure keeps pendingRemoteSync=true & flips to local-first
-        fullBatchDirty = true;
-        store.writeSnapshot(snapshot.cuidadores, true);
-        emit(createFrozenSnapshot(snapshot.cuidadores, 'local-first', true));
-      } finally {
-        if (mutationBatchAbort === batchController) {
-          mutationBatchAbort = null;
-        }
-      }
+      await syncFullRosterBatch(nextList, myRevision);
       return;
     }
 
@@ -288,7 +340,7 @@ export function createCaregiverScheduleController(
       dirtyCardIds.delete(targetId);
       const stillDirty = fullBatchDirty || dirtyCardIds.size > 0;
       store.writeSnapshot(canonicalList, stillDirty);
-      emit(createFrozenSnapshot(canonicalList, 'online', stillDirty));
+      emit(createFrozenSnapshot(canonicalList, 'online', stillDirty, hasUndoBackup()));
     } catch (error) {
       if (disposed || isAbortedApiError(error) || itemController.signal.aborted) {
         return;
@@ -297,7 +349,7 @@ export function createCaregiverScheduleController(
       dirtyCardIds.add(targetId);
       fullBatchDirty = true;
       store.writeSnapshot(snapshot.cuidadores, true);
-      emit(createFrozenSnapshot(snapshot.cuidadores, 'local-first', true));
+      emit(createFrozenSnapshot(snapshot.cuidadores, 'local-first', true, hasUndoBackup()));
     } finally {
       if (itemMutationAborts.get(targetId) === itemController) {
         itemMutationAborts.delete(targetId);
@@ -339,6 +391,75 @@ export function createCaregiverScheduleController(
     );
   }
 
+  async function importCaregiversBatch(cuidadores: readonly Cuidador[]): Promise<void> {
+    if (disposed) {
+      return;
+    }
+
+    // Write-Audit-Publish (M3.2): valida 100% do lote ANTES de tocar AbortControllers ou storage
+    const nextList = toBatchPayload(cuidadores);
+    const previousList = snapshot.cuidadores;
+
+    abortReconcileRequest();
+    abortAllMutationRequests();
+
+    // Guarda anti-duplo-Ctrl+V (M3.2): preserva o backup original se a mesma planilha for colada 2x
+    if (!areCaregiverListsEqual(previousList, nextList)) {
+      store.writeUndoBackup(previousList);
+    }
+
+    fullBatchDirty = true;
+    dirtyCardIds.clear();
+    const myRevision = ++revision;
+
+    const optimisticConnection: ConnectionStatus =
+      snapshot.connectionStatus === 'online' ? 'online' : snapshot.connectionStatus;
+
+    store.writeSnapshot(nextList, true);
+    emit(createFrozenSnapshot(nextList, optimisticConnection, true, hasUndoBackup()));
+
+    await syncFullRosterBatch(nextList, myRevision);
+  }
+
+  async function undoLastImport(): Promise<boolean> {
+    if (disposed) {
+      return false;
+    }
+
+    const backup = store.readUndoBackup();
+    if (backup === null) {
+      if (snapshot.canUndoImport) {
+        emit(
+          createFrozenSnapshot(
+            snapshot.cuidadores,
+            snapshot.connectionStatus,
+            snapshot.pendingRemoteSync,
+            false
+          )
+        );
+      }
+      return false;
+    }
+
+    abortReconcileRequest();
+    abortAllMutationRequests();
+
+    fullBatchDirty = true;
+    dirtyCardIds.clear();
+    const myRevision = ++revision;
+
+    const optimisticConnection: ConnectionStatus =
+      snapshot.connectionStatus === 'online' ? 'online' : snapshot.connectionStatus;
+
+    // Ordem crash-safe (M3.2): restaura schedule:v1 antes de remover undo_backup:v1
+    store.writeSnapshot(backup.cuidadores, true);
+    store.clearUndoBackup();
+    emit(createFrozenSnapshot(backup.cuidadores, optimisticConnection, true, false));
+
+    await syncFullRosterBatch(backup.cuidadores, myRevision);
+    return true;
+  }
+
   async function resetSchedule(): Promise<void> {
     if (disposed) {
       return;
@@ -356,7 +477,8 @@ export function createCaregiverScheduleController(
       snapshot.connectionStatus === 'online' ? 'online' : snapshot.connectionStatus;
 
     store.writeSnapshot(seed, true);
-    emit(createFrozenSnapshot(seed, optimisticConnection, true));
+    store.clearUndoBackup();
+    emit(createFrozenSnapshot(seed, optimisticConnection, true, false));
 
     const resetController = new AbortController();
     mutationBatchAbort = resetController;
@@ -369,14 +491,14 @@ export function createCaregiverScheduleController(
       fullBatchDirty = false;
       dirtyCardIds.clear();
       store.writeSnapshot(remoteSeed, false);
-      emit(createFrozenSnapshot(remoteSeed, 'online', false));
+      emit(createFrozenSnapshot(remoteSeed, 'online', false, false));
     } catch (error) {
       if (disposed || isAbortedApiError(error) || resetController.signal.aborted) {
         return;
       }
       fullBatchDirty = true;
       store.writeSnapshot(snapshot.cuidadores, true);
-      emit(createFrozenSnapshot(snapshot.cuidadores, 'local-first', true));
+      emit(createFrozenSnapshot(snapshot.cuidadores, 'local-first', true, false));
     } finally {
       if (mutationBatchAbort === resetController) {
         mutationBatchAbort = null;
@@ -390,7 +512,14 @@ export function createCaregiverScheduleController(
 
   const handleOffline = (): void => {
     abortReconcileRequest();
-    emit(createFrozenSnapshot(snapshot.cuidadores, 'local-first', snapshot.pendingRemoteSync));
+    emit(
+      createFrozenSnapshot(
+        snapshot.cuidadores,
+        'local-first',
+        snapshot.pendingRemoteSync,
+        hasUndoBackup()
+      )
+    );
   };
 
   function start(): void {
@@ -440,6 +569,8 @@ export function createCaregiverScheduleController(
     toggleCaregiverStatus,
     simulateCarlosAbsence,
     confirmCaregiverCoverage,
+    importCaregiversBatch,
+    undoLastImport,
     resetSchedule,
   };
 }

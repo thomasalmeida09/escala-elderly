@@ -11,10 +11,13 @@ export interface UseCaregiversResult {
   readonly cuidadores: Cuidador[];
   readonly connectionStatus: ConnectionStatus;
   readonly pendingRemoteSync: boolean;
+  readonly canUndoImport: boolean;
   readonly loading: boolean;
   readonly simularFaltaDoCarlos: () => void;
   readonly alternarStatusCuidador: (id: number) => void;
   readonly confirmarCobertura: (absentCaregiverId: number, substitutoNome: string) => void;
+  readonly importarEscala: (cuidadores: readonly Cuidador[]) => Promise<void>;
+  readonly desfazerImportacao: () => Promise<boolean>;
   readonly restaurarEscala: () => void;
 }
 
@@ -52,6 +55,17 @@ export function useCaregivers(options?: CaregiverScheduleControllerOptions): Use
     [controller]
   );
 
+  const importarEscala = useCallback(
+    async (cuidadores: readonly Cuidador[]) => {
+      await controller.importCaregiversBatch(cuidadores);
+    },
+    [controller]
+  );
+
+  const desfazerImportacao = useCallback(async () => {
+    return controller.undoLastImport();
+  }, [controller]);
+
   const restaurarEscala = useCallback(() => {
     void controller.resetSchedule();
   }, [controller]);
@@ -60,10 +74,13 @@ export function useCaregivers(options?: CaregiverScheduleControllerOptions): Use
     cuidadores: snapshot.cuidadores,
     connectionStatus: snapshot.connectionStatus,
     pendingRemoteSync: snapshot.pendingRemoteSync,
+    canUndoImport: snapshot.canUndoImport,
     loading: false,
     simularFaltaDoCarlos,
     alternarStatusCuidador,
     confirmarCobertura,
+    importarEscala,
+    desfazerImportacao,
     restaurarEscala,
   };
 }

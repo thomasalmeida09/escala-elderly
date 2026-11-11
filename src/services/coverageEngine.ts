@@ -23,7 +23,7 @@ export type CoverageCandidateSource = 'escala' | 'reserva';
 
 export type ShiftKind = 'diurno' | 'noturno' | 'flex';
 
-export type ShiftMatchLabel = 'Mesmo turno' | 'Turno flexível' | 'Outro turno';
+export type ShiftMatchLabel = 'Mesmo turno' | 'Turno compatível' | 'Turno flexível' | 'Outro turno';
 
 export interface CoverageCandidate {
   readonly cuidador: Cuidador;
@@ -132,7 +132,7 @@ function evaluateShiftAffinity(
   if (absentShift === 'flex') {
     return {
       score: 0,
-      label: candidateShift === 'flex' ? 'Turno flexível' : 'Mesmo turno',
+      label: candidateShift === 'flex' ? 'Turno flexível' : 'Turno compatível',
     };
   }
   if (candidateShift === absentShift) {
