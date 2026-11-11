@@ -10,6 +10,7 @@ import {
   defaultCaregiverApiClient,
   isAbortedApiError,
 } from './caregiverApi';
+import { validateCoverageAssignment } from './coverageEngine';
 import { type LocalFirstStore, defaultLocalFirstStore, getCanonicalSeed } from './localFirstStore';
 
 export const CARLOS_ROCHA_ID = 3;
@@ -39,6 +40,7 @@ export interface CaregiverScheduleController {
   reconcile(): Promise<void>;
   toggleCaregiverStatus(id: number): Promise<void>;
   simulateCarlosAbsence(): Promise<void>;
+  confirmCaregiverCoverage(absentCaregiverId: number, substituteName: string): Promise<void>;
   resetSchedule(): Promise<void>;
 }
 
@@ -315,6 +317,28 @@ export function createCaregiverScheduleController(
     );
   }
 
+  async function confirmCaregiverCoverage(
+    absentCaregiverId: number,
+    substituteName: string
+  ): Promise<void> {
+    if (disposed) {
+      return;
+    }
+
+    const validatedSubstitute = validateCoverageAssignment(
+      absentCaregiverId,
+      substituteName,
+      snapshot.cuidadores
+    );
+    if (validatedSubstitute === null) {
+      return;
+    }
+
+    await mutateSingleOrPromoteBatch(absentCaregiverId, (current) =>
+      applyStatusChange(current, 'Cobertura', validatedSubstitute)
+    );
+  }
+
   async function resetSchedule(): Promise<void> {
     if (disposed) {
       return;
@@ -415,6 +439,7 @@ export function createCaregiverScheduleController(
     reconcile,
     toggleCaregiverStatus,
     simulateCarlosAbsence,
+    confirmCaregiverCoverage,
     resetSchedule,
   };
 }

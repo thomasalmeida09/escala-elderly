@@ -14,6 +14,7 @@ export interface UseCaregiversResult {
   readonly loading: boolean;
   readonly simularFaltaDoCarlos: () => void;
   readonly alternarStatusCuidador: (id: number) => void;
+  readonly confirmarCobertura: (absentCaregiverId: number, substitutoNome: string) => void;
   readonly restaurarEscala: () => void;
 }
 
@@ -44,6 +45,13 @@ export function useCaregivers(options?: CaregiverScheduleControllerOptions): Use
     [controller]
   );
 
+  const confirmarCobertura = useCallback(
+    (absentCaregiverId: number, substitutoNome: string) => {
+      void controller.confirmCaregiverCoverage(absentCaregiverId, substitutoNome);
+    },
+    [controller]
+  );
+
   const restaurarEscala = useCallback(() => {
     void controller.resetSchedule();
   }, [controller]);
@@ -55,6 +63,7 @@ export function useCaregivers(options?: CaregiverScheduleControllerOptions): Use
     loading: false,
     simularFaltaDoCarlos,
     alternarStatusCuidador,
+    confirmarCobertura,
     restaurarEscala,
   };
 }
