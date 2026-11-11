@@ -1,6 +1,8 @@
 import { ThemeProvider } from '@mui/material';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import BarraPlanilha from '../src/components/BarraPlanilha/BarraPlanilha';
+import { BARRA_PLANILHA_TOKENS } from '../src/components/BarraPlanilha/BarraPlanilha.styles';
 import CardCuidador from '../src/components/CardCuidador/CardCuidador';
 import { CARD_STATUS_TOKENS } from '../src/components/CardCuidador/CardCuidador.styles';
 import PainelCobertura from '../src/components/PainelCobertura/PainelCobertura';
@@ -17,6 +19,7 @@ import {
 import {
   SCHEDULE_STORAGE_KEY,
   type StorageAdapter,
+  UNDO_IMPORT_STORAGE_KEY,
   createLocalFirstStore,
   getCanonicalSeed,
 } from '../src/services/localFirstStore';
@@ -194,6 +197,46 @@ describe('FE #2 & FE #7 — Dashboard, CardCuidador & PainelCobertura SSR Semant
       }
     }
 
+    // Exhaustive WCAG 1.4.3 verification across 100% of BARRA_PLANILHA_TOKENS (including hoverBg & dropzone borders)
+    for (const [tokenKey, tokenValue] of Object.entries(BARRA_PLANILHA_TOKENS)) {
+      const baseRatio = wcagContrastRatio(tokenValue.fg, tokenValue.bg);
+      expect(
+        baseRatio,
+        `BarraPlanilha token "${tokenKey}" (${tokenValue.fg} on ${tokenValue.bg}) must exceed 4.5:1`
+      ).toBeGreaterThanOrEqual(4.5);
+
+      if ('hoverBg' in tokenValue) {
+        const hoverRatio = wcagContrastRatio(tokenValue.fg, tokenValue.hoverBg);
+        expect(
+          hoverRatio,
+          `BarraPlanilha hover token "${tokenKey}" (${tokenValue.fg} on ${tokenValue.hoverBg}) must exceed 4.5:1`
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+
+    expect(
+      wcagContrastRatio(
+        BARRA_PLANILHA_TOKENS.dropzoneIdle.border,
+        BARRA_PLANILHA_TOKENS.dropzoneIdle.bg
+      )
+    ).toBeGreaterThanOrEqual(3.0);
+    expect(
+      wcagContrastRatio(
+        BARRA_PLANILHA_TOKENS.dropzoneActive.border,
+        BARRA_PLANILHA_TOKENS.dropzoneActive.bg
+      )
+    ).toBeGreaterThanOrEqual(3.0);
+
+    // FE07 Nit 1 closure: MuiButton transition never uses 'all' (prevents 200ms focus-visible outline lag)
+    const buttonRootStyle = warmCareTheme.components?.MuiButton?.styleOverrides?.root as Record<
+      string,
+      unknown
+    >;
+    expect(buttonRootStyle.transition).toBe(
+      'background-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out, border-color 0.2s ease-in-out'
+    );
+    expect(String(buttonRootStyle.transition)).not.toContain('all');
+
     // Focus-visible outline (#005C5A) against Warm Care canvas (#F9F8F6) & card paper (#FFFFFF) >= 3:1 (WCAG 1.4.11)
     expect(wcagContrastRatio('#005C5A', '#F9F8F6')).toBeGreaterThanOrEqual(7.0);
     expect(wcagContrastRatio('#005C5A', '#FFFFFF')).toBeGreaterThanOrEqual(7.0);
@@ -353,5 +396,80 @@ describe('FE #2 & FE #7 — Dashboard, CardCuidador & PainelCobertura SSR Semant
 
     expect(added).toEqual(['online', 'offline', 'online', 'offline']);
     expect(removed).toEqual(['offline', 'online', 'offline', 'online']);
+  });
+
+  it('7. renders BarraPlanilha (.no-print) with hidden file input (tabindex=-1, aria-hidden), WCAG 2.5.3 labels, and conditional Undo button on F5 hydration', () => {
+    const cleanHtml = renderToStaticMarkup(
+      <ThemeProvider theme={warmCareTheme}>
+        <BarraPlanilha
+          cuidadores={getCanonicalSeed()}
+          canUndoImport={false}
+          onImportSchedule={async () => undefined}
+          onUndoImport={async () => false}
+        />
+      </ThemeProvider>
+    );
+
+    expect(cleanHtml).toContain('no-print');
+    expect(cleanHtml).toContain('role="region"');
+    expect(cleanHtml).toContain('aria-labelledby="barra-planilha-heading"');
+    expect(cleanHtml).toContain('PLANILHA &amp; BACKUP LOCAL-FIRST');
+    expect(cleanHtml).toContain('Importar CSV');
+    expect(cleanHtml).toContain('Exportar CSV / Backup');
+    expect(cleanHtml).not.toContain('Desfazer Importação');
+
+    // Hidden <input type="file"> excluded from Tab order and assistive tree (M4.2)
+    const fileInputMatch = cleanHtml.match(/<input\b[^>]*type="file"[^>]*>/i);
+    expect(fileInputMatch).not.toBeNull();
+    expect(fileInputMatch![0]).toContain('tabindex="-1"');
+    expect(fileInputMatch![0]).toContain('aria-hidden="true"');
+    expect(fileInputMatch![0]).toContain('accept=".csv,.tsv,.txt');
+
+    // Preloaded storage with undo_backup:v1 renders [Desfazer Importação] in 0ms on Dashboard boot (M3.3)
+    const backingMap = new Map<string, string>([
+      [
+        SCHEDULE_STORAGE_KEY,
+        JSON.stringify({
+          schemaVersion: 1,
+          updatedAtIso: '2026-11-10T23:35:00.000Z',
+          pendingRemoteSync: false,
+          cuidadores: [parseCuidador({ id: 1, nome: 'Fernanda Melo', status: 'Presente' })],
+        }),
+      ],
+      [
+        UNDO_IMPORT_STORAGE_KEY,
+        JSON.stringify({
+          schemaVersion: 1,
+          savedAtIso: '2026-11-10T23:34:50.000Z',
+          cuidadores: getCanonicalSeed(),
+        }),
+      ],
+    ]);
+    const undoStore = createLocalFirstStore({
+      storage: {
+        getItem: (k) => backingMap.get(k) ?? null,
+        setItem: (k, v) => {
+          backingMap.set(k, v);
+        },
+        removeItem: (k) => {
+          backingMap.delete(k);
+        },
+      },
+    });
+
+    const hydratedUndoHtml = renderToStaticMarkup(
+      <ThemeProvider theme={warmCareTheme}>
+        <Dashboard controllerOptions={{ store: undoStore, eventTarget: null }} />
+      </ThemeProvider>
+    );
+
+    expect(hydratedUndoHtml).toContain('Fernanda Melo');
+    expect(hydratedUndoHtml).toContain('Desfazer Importação');
+
+    // Decorative emojis inside BarraPlanilha buttons are aria-hidden="true" (WCAG 2.5.3)
+    const allButtons = [...hydratedUndoHtml.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/gi)];
+    for (const [, inner] of allButtons) {
+      expect(inner).not.toMatch(/<(button|a|input)\b/i);
+    }
   });
 });

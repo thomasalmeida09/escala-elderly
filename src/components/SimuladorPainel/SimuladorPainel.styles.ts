@@ -11,8 +11,8 @@ export const SIMULADOR_BUTTON_TOKENS = {
 export const styles = {
   controlPanel: {
     bgcolor: 'background.paper',
-    p: '20px',
-    mb: 4,
+    p: '16px 20px',
+    mb: 2,
     borderRadius: '8px',
     boxShadow: '0px 4px 20px rgba(45, 49, 46, 0.03)',
     border: '1px solid',

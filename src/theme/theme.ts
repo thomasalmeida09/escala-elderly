@@ -46,7 +46,11 @@ export const warmCareTheme = createTheme({
           textTransform: 'none',
           fontWeight: 600,
           boxShadow: '0px 2px 4px rgba(0, 122, 120, 0.08)',
-          transition: 'all 0.2s ease-in-out',
+          transition:
+            'background-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out, border-color 0.2s ease-in-out',
+          '@media (prefers-reduced-motion: reduce)': {
+            transition: 'none',
+          },
           '&:hover': {
             boxShadow: '0px 4px 12px rgba(0, 122, 120, 0.15)',
           },

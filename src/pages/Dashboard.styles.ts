@@ -33,7 +33,7 @@ export const styles = {
   pageWrapper: {
     bgcolor: 'background.default',
     minHeight: '100vh',
-    py: 6,
+    py: { xs: 2.5, sm: 4 },
     display: 'flex',
     alignItems: 'center',
     transition: 'background-color 0.3s ease',
@@ -41,11 +41,11 @@ export const styles = {
 
   headerBox: {
     textAlign: 'left',
-    mb: 4,
+    mb: 2.5,
     pl: 1,
     borderBottom: '1px dashed',
     borderColor: 'divider',
-    pb: 2,
+    pb: 1.5,
   } as SxProps<Theme>,
 
   headerDivider: {

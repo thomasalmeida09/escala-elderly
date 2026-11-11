@@ -63,6 +63,9 @@ escala-elderly/
 │   └── favicon.svg                              # Ícone vetorial da aplicação
 ├── src/
 │   ├── components/
+│   │   ├── BarraPlanilha/
+│   │   │   ├── BarraPlanilha.tsx                # Barra .no-print de importação/exportação CSV e Undo
+│   │   │   └── BarraPlanilha.styles.ts          # Tokens WCAG 2.2 AA e estilos responsivos de planilha
 │   │   ├── CardCuidador/
 │   │   │   ├── CardCuidador.tsx                 # Card individual de status do cuidador
 │   │   │   └── CardCuidador.styles.ts           # Estilos isolados do CardCuidador
