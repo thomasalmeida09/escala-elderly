@@ -370,9 +370,10 @@ export function createCaregiverScheduleController(
   };
 
   function start(): void {
-    if (started || disposed) {
+    if (started) {
       return;
     }
+    disposed = false;
     started = true;
     eventTarget?.addEventListener('online', handleOnline);
     eventTarget?.addEventListener('offline', handleOffline);
@@ -384,14 +385,15 @@ export function createCaregiverScheduleController(
       return;
     }
     disposed = true;
-    // LIFO resource teardown: listeners in reverse registration order, then in-flight AbortControllers
+    // LIFO resource teardown: listeners in reverse registration order, then in-flight AbortControllers.
+    // Preserves external store subscribers so React 19 <StrictMode> effect remount (start -> dispose -> start) converges cleanly.
     if (started) {
+      started = false;
       eventTarget?.removeEventListener('offline', handleOffline);
       eventTarget?.removeEventListener('online', handleOnline);
     }
     abortAllMutationRequests();
     abortReconcileRequest();
-    listeners.clear();
   }
 
   function subscribe(listener: () => void): () => void {

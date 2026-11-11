@@ -1,5 +1,13 @@
 import type { SxProps, Theme } from '@mui/material';
 
+export const SIMULADOR_BUTTON_TOKENS = {
+  primaryBg: '#007A78',
+  primaryFg: '#FFFFFF',
+  secondaryBg: '#FFFFFF',
+  secondaryFg: '#005C5A',
+  secondaryBorder: '#005C5A',
+} as const;
+
 export const styles = {
   controlPanel: {
     bgcolor: 'background.paper',
@@ -12,21 +20,55 @@ export const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 1.5,
   } as SxProps<Theme>,
 
   panelLabel: {
-    color: 'primary.main',
+    color: '#005C5A',
     fontWeight: 700,
   } as SxProps<Theme>,
 
+  actionsGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 1,
+  } as SxProps<Theme>,
+
   simulateButton: {
-    bgcolor: 'primary.main',
-    color: '#FFFFFF',
+    bgcolor: SIMULADOR_BUTTON_TOKENS.primaryBg,
+    color: SIMULADOR_BUTTON_TOKENS.primaryFg,
     fontSize: '13px',
-    px: 3,
-    py: 1,
+    minHeight: '36px',
+    px: 2.25,
+    py: 0.85,
     '&:hover': {
       bgcolor: 'primary.dark',
+    },
+    '&:focus-visible': {
+      outline: '2px solid #005C5A',
+      outlineOffset: '2px',
+    },
+  } as SxProps<Theme>,
+
+  resetButton: {
+    bgcolor: SIMULADOR_BUTTON_TOKENS.secondaryBg,
+    color: SIMULADOR_BUTTON_TOKENS.secondaryFg,
+    borderColor: SIMULADOR_BUTTON_TOKENS.secondaryBorder,
+    fontSize: '13px',
+    minHeight: '36px',
+    px: 2,
+    py: 0.85,
+    boxShadow: 'none',
+    '&:hover': {
+      bgcolor: '#E6F2F2',
+      borderColor: 'primary.dark',
+      boxShadow: 'none',
+    },
+    '&:focus-visible': {
+      outline: '2px solid #005C5A',
+      outlineOffset: '2px',
     },
   } as SxProps<Theme>,
 };

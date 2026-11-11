@@ -1,38 +1,60 @@
-import { useState, useEffect } from 'react';
-import caregiversData from '../mocks/Caregive.json';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import {
+  type CaregiverScheduleControllerOptions,
+  createCaregiverScheduleController,
+} from '../services/caregiverSyncController';
+import type { ConnectionStatus, Cuidador, StatusCuidador } from '../types/caregiver';
 
-export interface Cuidador {
-  id: number;
-  nome: string;
-  status: string;
+export type { ConnectionStatus, Cuidador, StatusCuidador };
+
+export interface UseCaregiversResult {
+  readonly cuidadores: Cuidador[];
+  readonly connectionStatus: ConnectionStatus;
+  readonly pendingRemoteSync: boolean;
+  readonly loading: boolean;
+  readonly simularFaltaDoCarlos: () => void;
+  readonly alternarStatusCuidador: (id: number) => void;
+  readonly restaurarEscala: () => void;
 }
 
-export function useCaregivers() {
-  const [cuidadores, setCuidadores] = useState<Cuidador[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+export function useCaregivers(options?: CaregiverScheduleControllerOptions): UseCaregiversResult {
+  const [controller] = useState(() => createCaregiverScheduleController(options));
 
-  // Simula o "fetch" buscando dados de uma API externa
+  const snapshot = useSyncExternalStore(
+    controller.subscribe,
+    controller.getSnapshot,
+    controller.getSnapshot
+  );
+
   useEffect(() => {
-    const fetchCuidadores = async () => {
-      setLoading(true);
-      // Simula delay de 1.2 segundos de rede
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-      setCuidadores(caregiversData);
-      setLoading(false);
+    controller.start();
+    return () => {
+      controller.dispose();
     };
+  }, [controller]);
 
-    fetchCuidadores();
-  }, []);
+  const simularFaltaDoCarlos = useCallback(() => {
+    void controller.simulateCarlosAbsence();
+  }, [controller]);
 
-  const simularFaltaDoCarlos = () => {
-    setCuidadores((prev) =>
-      prev.map((cuidador) => (cuidador.id === 3 ? { ...cuidador, status: 'Faltou' } : cuidador))
-    );
-  };
+  const alternarStatusCuidador = useCallback(
+    (id: number) => {
+      void controller.toggleCaregiverStatus(id);
+    },
+    [controller]
+  );
+
+  const restaurarEscala = useCallback(() => {
+    void controller.resetSchedule();
+  }, [controller]);
 
   return {
-    cuidadores,
-    loading,
+    cuidadores: snapshot.cuidadores,
+    connectionStatus: snapshot.connectionStatus,
+    pendingRemoteSync: snapshot.pendingRemoteSync,
+    loading: false,
     simularFaltaDoCarlos,
+    alternarStatusCuidador,
+    restaurarEscala,
   };
 }
