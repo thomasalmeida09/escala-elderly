@@ -18,7 +18,7 @@ Sistema web de monitoramento e gestão inteligente de escalas de cuidadores para
 | 📊 **Quadro Kanban Interativo**               | **[GitHub Projects (Front + Back)](https://github.com/users/augustoheiss/projects/1)**    | Quadro unificado com o status em tempo real de todas as tarefas da equipe     |
 | 🖼️ **Mapa Visual da Arquitetura (PR Lens)**   | **[Canvas Técnico & ADRs (`prlens.dev`)](https://prlens.dev/c/L-2rShWu_j0WpKt-jT0Cog)**   | Diagramas animados de arquitetura, _blast radius_ das Sprints e payloads JSON |
 | 👶 **Explicação Passo a Passo (ELI5 Canvas)** | **[Walkthrough Onboarding (`prlens.dev`)](https://prlens.dev/c/x2StISYcAmXvy49MhetrsQ)**  | Tour visual progressivo de como o sistema resolve uma falta no plantão        |
-| 🏛️ **Catálogo de ADRs do Frontend**           | **[`docs/adr/README.md`](./docs/adr/README.md)**                                          | Decisões arquiteturais já tomadas (`ADR-FE-001` a `ADR-FE-012`) e governança  |
+| 🏛️ **Catálogo de ADRs do Frontend**           | **[`docs/adr/README.md`](./docs/adr/README.md)**                                          | Decisões arquiteturais já tomadas (`ADR-FE-001` a `ADR-FE-013`) e governança  |
 | 🗺️ **Divisão por Sprints e Colunas**          | **[`docs/adr/QUADRO-KANBAN-SPRINTS.md`](./docs/adr/QUADRO-KANBAN-SPRINTS.md)**            | Mapa completo das 14 Issues distribuídas entre as Sprints 1, 2 e 3            |
 | ☕ **Repositório Backend (API Java)**         | **[`escala-elderly-backend`](https://github.com/thomasalmeida09/escala-elderly-backend)** | API REST em Java 17 + Spring Boot 4.1 que alimenta este painel                |
 
@@ -39,6 +39,7 @@ O **Escala Elderly** substitui o controle em papel por um **Painel do Gerente** 
 - **Visibilidade Instantânea (`0ms`):** Identificação imediata e acessível (WCAG 2.2 AA) de quem está `PRESENTE` (`#005C5A` / `#E6F2F2`), `FALTOU` (`#92400E` / `#FEF3C7`), em `FOLGA` (`#374151` / `#F3F4F6`) ou em `COBERTURA` (`#1E40AF` / `#DBEAFE`).
 - **Simulação, Alternância por Teclado e Restauração:** Painel rápido para simular `"Falta de Carlos"`, alternar status diretamente nos cards (`Enter`/`Space`/clique) e restaurar a escala padrão (`"Restaurar Escala"`).
 - **Cobertura Inteligente CLT & Acionamento WhatsApp (`ADR-FE-012`):** Ao registrar `"Faltou"`, o painel sugere imediatamente os folguistas elegíveis (intervalo interjornada `>= 11h` do Art. 66 da CLT e zero conflito de plantão), com convocação em 1 clique via `wa.me` (custo R$ 0 e minimização LGPD) e confirmação instantânea da substituição.
+- **Importação/Exportação Rápida CSV/Excel & Backup com Rollback (`ADR-FE-013`):** Preenchimento em `< 1s` via seletor de arquivo, _Drag-and-Drop_ ou `Ctrl+V` direto do Excel (auto-cura `;`/`\t`/`,`, `UTF-8`/`Windows-1252` e blindagem OWASP anti-CSV Injection), exportação com `UTF-8 BOM` pronta para Excel e reversão transacional em 1 clique (`Desfazer Importação` em `escala_elderly:undo_backup:v1`).
 - **Arquitetura Resiliente (Local-First + REST API):** Hidratação síncrona em `0ms` via `localStorage` (`escala_elderly:schedule:v1`) sincronizada automaticamente aos endpoints `GET`, `PATCH`, `POST /batch` e `POST /reset` da API Spring Boot com fallback offline transparente (`MODO LOCAL-FIRST`).
 
 ---
@@ -53,11 +54,11 @@ escala-elderly/
 │   ├── workflows/
 │   │   └── ci.yml                               # Pipeline CI Dual-Job Node 24 (Build/Lint/Vitest/Budget & LGPD Gate)
 │   ├── CODEOWNERS                               # Roteamento automático de Code Review (@thomasalmeida09 @augustoheiss)
-│   ├── pull_request_template.md                 # Checklist de governança alinhado às ADRs (ADR-FE-001..012)
+│   ├── pull_request_template.md                 # Checklist de governança alinhado às ADRs (ADR-FE-001..013)
 │   └── ruleset-main-protection.json             # Definição auditável de proteção da branch main
 ├── docs/
 │   └── adr/
-│       ├── README.md                            # Catálogo oficial de ADRs (ADR-FE-001 a ADR-FE-012)
+│       ├── README.md                            # Catálogo oficial de ADRs (ADR-FE-001 a ADR-FE-013)
 │       └── QUADRO-KANBAN-SPRINTS.md             # Divisão das Issues por Sprints e Colunas
 ├── public/
 │   └── favicon.svg                              # Ícone vetorial da aplicação
