@@ -1,5 +1,7 @@
+import { useCallback, useRef } from 'react';
 import { Box, Container } from '@mui/material';
 import CardCuidador from '../components/CardCuidador/CardCuidador';
+import PainelCobertura from '../components/PainelCobertura/PainelCobertura';
 import SimuladorPainel from '../components/SimuladorPainel/SimuladorPainel';
 import Text from '../components/common/Text';
 import { useCaregivers } from '../hooks/useCaregivers';
@@ -16,8 +18,24 @@ export default function Dashboard({ controllerOptions }: DashboardProps = {}) {
     connectionStatus,
     simularFaltaDoCarlos,
     alternarStatusCuidador,
+    confirmarCobertura,
     restaurarEscala,
   } = useCaregivers(controllerOptions);
+
+  const cardButtonRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
+
+  const handleConfirmCoverage = useCallback(
+    (absentCaregiverId: number, substitutoNome: string) => {
+      confirmarCobertura(absentCaregiverId, substitutoNome);
+      queueMicrotask(() => {
+        const targetButton = cardButtonRefs.current.get(absentCaregiverId);
+        if (targetButton && typeof targetButton.focus === 'function') {
+          targetButton.focus();
+        }
+      });
+    },
+    [confirmarCobertura]
+  );
 
   const badgeToken = CONNECTION_BADGE_TOKENS[connectionStatus];
 
@@ -49,14 +67,29 @@ export default function Dashboard({ controllerOptions }: DashboardProps = {}) {
         {/* Simulador e Restauração da Escala */}
         <SimuladorPainel onSimulate={simularFaltaDoCarlos} onReset={restaurarEscala} />
 
-        {/* Lista de Cards com Hidratação Local-First 0ms */}
+        {/* Lista de Cards com Hidratação Local-First 0ms e Triagem CLT Irmã */}
         <Box sx={styles.cardsContainer}>
           {cuidadores.map((cuidador) => (
-            <CardCuidador
-              key={cuidador.id}
-              cuidador={cuidador}
-              onToggleStatus={alternarStatusCuidador}
-            />
+            <Box key={cuidador.id} sx={styles.cardSlot}>
+              <CardCuidador
+                cuidador={cuidador}
+                onToggleStatus={alternarStatusCuidador}
+                buttonRef={(node) => {
+                  if (node !== null) {
+                    cardButtonRefs.current.set(cuidador.id, node);
+                  } else {
+                    cardButtonRefs.current.delete(cuidador.id);
+                  }
+                }}
+              />
+              {cuidador.status === 'Faltou' ? (
+                <PainelCobertura
+                  absentCaregiver={cuidador}
+                  cuidadores={cuidadores}
+                  onConfirmCoverage={handleConfirmCoverage}
+                />
+              ) : null}
+            </Box>
           ))}
         </Box>
       </Container>

@@ -3,17 +3,25 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import CardCuidador from '../src/components/CardCuidador/CardCuidador';
 import { CARD_STATUS_TOKENS } from '../src/components/CardCuidador/CardCuidador.styles';
+import PainelCobertura from '../src/components/PainelCobertura/PainelCobertura';
+import { PAINEL_COBERTURA_TOKENS } from '../src/components/PainelCobertura/PainelCobertura.styles';
 import { SIMULADOR_BUTTON_TOKENS } from '../src/components/SimuladorPainel/SimuladorPainel.styles';
 import Dashboard from '../src/pages/Dashboard';
 import { CONNECTION_BADGE_TOKENS } from '../src/pages/Dashboard.styles';
 import { createCaregiverApiClient } from '../src/services/caregiverApi';
 import {
+  CARLOS_ROCHA_ID,
   type ConnectivityEventTarget,
   createCaregiverScheduleController,
 } from '../src/services/caregiverSyncController';
-import { createLocalFirstStore, getCanonicalSeed } from '../src/services/localFirstStore';
+import {
+  SCHEDULE_STORAGE_KEY,
+  type StorageAdapter,
+  createLocalFirstStore,
+  getCanonicalSeed,
+} from '../src/services/localFirstStore';
 import { warmCareTheme } from '../src/theme/theme';
-import { parseCuidador } from '../src/types/caregiver';
+import { applyStatusChange, parseCuidador } from '../src/types/caregiver';
 
 function parseHexChannel(hexPair: string): number {
   const srgb = Number.parseInt(hexPair, 16) / 255;
@@ -39,8 +47,33 @@ function wcagContrastRatio(fgHex: string, bgHex: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-describe('FE #2 — Dashboard & CardCuidador SSR Semantics, WCAG 2.2 AA & StrictMode Contract', () => {
-  it('1. renders Dashboard in 0ms with <h1>, polite status badge, dual simulator buttons, and 4 caregivers', () => {
+function createPreloadedStorage(cuidadores: ReturnType<typeof getCanonicalSeed>): StorageAdapter {
+  const map = new Map<string, string>([
+    [
+      SCHEDULE_STORAGE_KEY,
+      JSON.stringify({
+        schemaVersion: 1,
+        updatedAtIso: '2026-11-10T18:50:00.000Z',
+        pendingRemoteSync: false,
+        cuidadores,
+      }),
+    ],
+  ]);
+  return {
+    getItem(key) {
+      return map.get(key) ?? null;
+    },
+    setItem(key, value) {
+      map.set(key, value);
+    },
+    removeItem(key) {
+      map.delete(key);
+    },
+  };
+}
+
+describe('FE #2 & FE #7 — Dashboard, CardCuidador & PainelCobertura SSR Semantics, WCAG 2.2 AA & StrictMode', () => {
+  it('1. renders Dashboard in 0ms with <h1>, polite status badge, dual simulator buttons, 4 caregivers, and zero open coverage panels when all Presente', () => {
     const store = createLocalFirstStore({ storage: null });
     const html = renderToStaticMarkup(
       <ThemeProvider theme={warmCareTheme}>
@@ -50,6 +83,7 @@ describe('FE #2 — Dashboard & CardCuidador SSR Semantics, WCAG 2.2 AA & Strict
 
     expect(html).toMatch(/<h1[^>]*>DASHBOARD<\/h1>/);
     expect(html).not.toContain('MuiCircularProgress');
+    expect(html).not.toContain('QUEM PODE COBRIR?');
 
     // Live region with decorative dot hidden from assistive tech (M4.3)
     expect(html).toContain('role="status"');
@@ -78,7 +112,7 @@ describe('FE #2 — Dashboard & CardCuidador SSR Semantics, WCAG 2.2 AA & Strict
     }
   });
 
-  it('2. enforces valid HTML5 <button> phrasing content (zero nested div/p) and WCAG 2.5.3 Label-in-Name', () => {
+  it('2. enforces valid HTML5 <button> phrasing content (zero nested div/p/button/a) and WCAG 2.5.3 Label-in-Name', () => {
     const coveredCaregiver = parseCuidador({
       id: 3,
       nome: 'Carlos Rocha',
@@ -97,19 +131,19 @@ describe('FE #2 — Dashboard & CardCuidador SSR Semantics, WCAG 2.2 AA & Strict
     const buttonBlocks = [...html.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/gi)];
     expect(buttonBlocks).toHaveLength(1);
 
-    const fullButtonTag = buttonBlocks[0][0];
-    const innerHtml = buttonBlocks[0][1];
+    const fullButtonTag = buttonBlocks[0]![0];
+    const innerHtml = buttonBlocks[0]![1]!;
 
     expect(fullButtonTag).toContain('type="button"');
     expect(fullButtonTag).toContain('print-avoid-break');
 
-    // Zero block-level <div> or <p> tags inside <button> (HTML5 phrasing model — M4.1)
-    expect(innerHtml).not.toMatch(/<(div|p)\b/i);
+    // Zero block-level <div>/<p> or interactive <button>/<a> tags inside <button>
+    expect(innerHtml).not.toMatch(/<(div|p|button|a)\b/i);
 
     // WCAG 2.5.3 Label-in-Name: accessible name begins with visible caregiver name and preserves room/shift/substitute
     const ariaLabelMatch = fullButtonTag.match(/aria-label="([^"]+)"/);
     expect(ariaLabelMatch).not.toBeNull();
-    const ariaLabel = ariaLabelMatch![1];
+    const ariaLabel = ariaLabelMatch![1]!;
     expect(ariaLabel.startsWith('Carlos Rocha')).toBe(true);
     expect(ariaLabel).toContain('Quarto 03');
     expect(ariaLabel).toContain('Noturno (19h-07h)');
@@ -119,7 +153,7 @@ describe('FE #2 — Dashboard & CardCuidador SSR Semantics, WCAG 2.2 AA & Strict
     expect(innerHtml).toContain('Cobertura: Folguista Turno A');
   });
 
-  it('3. guarantees WCAG 2.2 Level AA (>= 4.5:1) sRGB contrast across all status badges, header states, and buttons', () => {
+  it('3. guarantees WCAG 2.2 Level AA (>= 4.5:1) sRGB contrast across all status badges, header states, buttons, and 100% of PAINEL_COBERTURA_TOKENS', () => {
     for (const [statusName, token] of Object.entries(CARD_STATUS_TOKENS)) {
       const ratio = wcagContrastRatio(token.fg, token.bg);
       expect(
@@ -143,12 +177,134 @@ describe('FE #2 — Dashboard & CardCuidador SSR Semantics, WCAG 2.2 AA & Strict
       wcagContrastRatio(SIMULADOR_BUTTON_TOKENS.secondaryFg, SIMULADOR_BUTTON_TOKENS.secondaryBg)
     ).toBeGreaterThanOrEqual(4.5);
 
+    // Exhaustive WCAG 1.4.3 verification across 100% of PAINEL_COBERTURA_TOKENS (including hoverBg & exhaustedAlert)
+    for (const [tokenKey, tokenValue] of Object.entries(PAINEL_COBERTURA_TOKENS)) {
+      const baseRatio = wcagContrastRatio(tokenValue.fg, tokenValue.bg);
+      expect(
+        baseRatio,
+        `PainelCobertura token "${tokenKey}" (${tokenValue.fg} on ${tokenValue.bg}) must exceed 4.5:1`
+      ).toBeGreaterThanOrEqual(4.5);
+
+      if ('hoverBg' in tokenValue) {
+        const hoverRatio = wcagContrastRatio(tokenValue.fg, tokenValue.hoverBg);
+        expect(
+          hoverRatio,
+          `PainelCobertura hover token "${tokenKey}" (${tokenValue.fg} on ${tokenValue.hoverBg}) must exceed 4.5:1`
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+
     // Focus-visible outline (#005C5A) against Warm Care canvas (#F9F8F6) & card paper (#FFFFFF) >= 3:1 (WCAG 1.4.11)
     expect(wcagContrastRatio('#005C5A', '#F9F8F6')).toBeGreaterThanOrEqual(7.0);
     expect(wcagContrastRatio('#005C5A', '#FFFFFF')).toBeGreaterThanOrEqual(7.0);
   });
 
-  it('4. survives React 19 <StrictMode> double-effect lifecycle (start -> dispose -> start) without wedging', async () => {
+  it('4. renders sibling PainelCobertura (.no-print) on absence with valid HTML5 links, noopener noreferrer, WCAG 2.5.3 labels, and CLT filter note', () => {
+    const rosterWithTwoAbsences = getCanonicalSeed().map((item) =>
+      item.id === CARLOS_ROCHA_ID || item.id === 4 ? applyStatusChange(item, 'Faltou') : item
+    );
+    const store = createLocalFirstStore({
+      storage: createPreloadedStorage(rosterWithTwoAbsences),
+    });
+
+    const html = renderToStaticMarkup(
+      <ThemeProvider theme={warmCareTheme}>
+        <Dashboard controllerOptions={{ store, eventTarget: null }} />
+      </ThemeProvider>
+    );
+
+    // Distinct accessible headings for simultaneous absences (WCAG 2.4.6)
+    expect(html).toContain('QUEM PODE COBRIR? — Carlos Rocha (Quarto 03)');
+    expect(html).toContain('QUEM PODE COBRIR? — Mariana Costa (Quarto 04)');
+
+    // PainelCobertura is rendered as <section class="... no-print" aria-labelledby="...">
+    const sections = [...html.matchAll(/<section\b[^>]*>/gi)].map((m) => m[0]);
+    expect(sections).toHaveLength(2);
+    for (const sectionOpenTag of sections) {
+      expect(sectionOpenTag).toContain('no-print');
+      expect(sectionOpenTag).toMatch(/aria-labelledby="[^"]+"/);
+    }
+
+    // Zero interactive descendants nested inside any <button> (RT-2)
+    const allButtons = [...html.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/gi)];
+    expect(allButtons.length).toBeGreaterThanOrEqual(10);
+    for (const [, inner] of allButtons) {
+      expect(inner).not.toMatch(/<(button|a)\b/i);
+    }
+
+    // Eligible candidates displayed; CLT < 11h Rafael Mendes (8h) excluded from action buttons
+    expect(html).toContain('Beatriz Alves');
+    expect(html).toContain('14h descanso • CLT OK');
+    expect(html).toContain('Helena Prado');
+    expect(html).toContain('24h descanso • CLT OK');
+    expect(html).not.toContain('Rafael Mendes');
+    expect(html).toContain('1 folguista ocultado por descanso &lt; 11h (CLT)');
+
+    // Validate all WhatsApp <a> links: target="_blank", rel="noopener noreferrer", NO type="button", LGPD-clean href, WCAG 2.5.3
+    const anchorTags = [...html.matchAll(/<a\b[^>]*>/gi)].map((m) => m[0]);
+    expect(anchorTags).toHaveLength(4);
+    for (const anchor of anchorTags) {
+      expect(anchor).toContain('target="_blank"');
+      expect(anchor).toContain('rel="noopener noreferrer"');
+      expect(anchor).not.toContain('type="button"');
+      expect(anchor).toMatch(/href="https:\/\/wa\.me\/551190000010[56]\?text=/);
+      expect(anchor).not.toContain('Carlos%20Rocha');
+      expect(anchor).not.toContain('Mariana%20Costa');
+
+      const labelMatch = anchor.match(/aria-label="([^"]+)"/);
+      expect(labelMatch).not.toBeNull();
+      expect(labelMatch![1]!.startsWith('Acionar no WhatsApp')).toBe(true);
+    }
+
+    // Validate Confirm buttons WCAG 2.5.3 Label-in-Name
+    const confirmLabels = [
+      ...html.matchAll(/<button\b[^>]*aria-label="(Confirmar Cobertura[^"]+)"/gi),
+    ].map((m) => m[1]!);
+    expect(confirmLabels).toHaveLength(4);
+    expect(confirmLabels).toContain(
+      'Confirmar Cobertura — Beatriz Alves no plantão de Carlos Rocha'
+    );
+  });
+
+  it('5. renders accessible exhaustion banner and group WhatsApp fallback when zero eligible substitutes remain', () => {
+    const absentCarlos = parseCuidador({
+      id: 3,
+      nome: 'Carlos Rocha',
+      status: 'Faltou',
+      turno: 'Noturno (19h-07h)',
+      quarto: 'Quarto 03',
+    });
+    const exhaustedPool = [
+      parseCuidador({ id: 9003, nome: 'Rafael Mendes', status: 'Folga', horasDescanso: 8 }),
+    ];
+
+    const html = renderToStaticMarkup(
+      <ThemeProvider theme={warmCareTheme}>
+        <PainelCobertura
+          absentCaregiver={absentCarlos}
+          cuidadores={[absentCarlos]}
+          reservePool={exhaustedPool}
+          onConfirmCoverage={() => undefined}
+        />
+      </ThemeProvider>
+    );
+
+    expect(html).toContain('Nenhum folguista elegível livre no momento');
+    expect(html).toContain('Convocar grupo no WhatsApp');
+
+    const anchorMatch = html.match(/<a\b[^>]*>/i);
+    expect(anchorMatch).not.toBeNull();
+    const anchorTag = anchorMatch![0];
+    expect(anchorTag).toContain('href="https://wa.me/?text=');
+    expect(anchorTag).toContain('target="_blank"');
+    expect(anchorTag).toContain('rel="noopener noreferrer"');
+    expect(anchorTag).not.toContain('type="button"');
+    expect(anchorTag).toContain(
+      'aria-label="Convocar grupo no WhatsApp para Quarto 03 (abre em nova aba)"'
+    );
+  });
+
+  it('6. survives React 19 <StrictMode> double-effect lifecycle (start -> dispose -> start) without wedging', async () => {
     const added: string[] = [];
     const removed: string[] = [];
     const target: ConnectivityEventTarget = {
