@@ -29,11 +29,26 @@ export const CONNECTION_BADGE_TOKENS: Readonly<Record<ConnectionStatus, Connecti
   },
 };
 
+export const DASHBOARD_PRIVACY_TOKENS = {
+  inactive: {
+    fg: '#1E293B',
+    bg: '#FFFFFF',
+    hoverBg: '#F1F5F9',
+    border: '#64748B',
+  },
+  active: {
+    fg: '#FFFFFF',
+    bg: '#005C5A',
+    hoverBg: '#004746',
+    border: '#005C5A',
+  },
+} as const;
+
 export const styles = {
   pageWrapper: {
     bgcolor: 'background.default',
     minHeight: '100vh',
-    py: { xs: 1.5, sm: 4 },
+    py: { xs: 1, sm: 4 },
     display: 'flex',
     alignItems: 'center',
     transition: 'background-color 0.3s ease',
@@ -41,21 +56,70 @@ export const styles = {
 
   headerBox: {
     textAlign: 'left',
-    mb: { xs: 1.5, sm: 2.5 },
-    pl: 1,
+    mb: { xs: 0.75, sm: 2.5 },
+    pl: { xs: 0, sm: 1 },
     borderBottom: '1px dashed',
     borderColor: 'divider',
-    pb: { xs: 1, sm: 1.5 },
+    pb: { xs: 0.75, sm: 1.5 },
   } as SxProps<Theme>,
+
+  headerTopRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 1,
+    minWidth: 0,
+  } as SxProps<Theme>,
+
+  headerTitle: {
+    fontSize: { xs: '1.25rem', sm: '1.5rem' },
+    lineHeight: 1.2,
+  } as SxProps<Theme>,
+
+  privacyToggleButton: (active: boolean): SxProps<Theme> => {
+    const token = active ? DASHBOARD_PRIVACY_TOKENS.active : DASHBOARD_PRIVACY_TOKENS.inactive;
+    return {
+      minHeight: { xs: '44px', sm: '36px' },
+      px: 1.25,
+      py: 0.5,
+      gap: 0.5,
+      minWidth: 0,
+      maxWidth: '100%',
+      bgcolor: token.bg,
+      color: token.fg,
+      border: `1px solid ${token.border}`,
+      borderRadius: '6px',
+      fontSize: '12px',
+      fontWeight: 700,
+      lineHeight: 1.2,
+      whiteSpace: 'normal',
+      textAlign: 'center',
+      boxShadow: 'none',
+      transition: 'box-shadow 0.15s ease-in-out, border-color 0.15s ease-in-out',
+      '&:hover': {
+        bgcolor: token.hoverBg,
+        borderColor: token.border,
+        boxShadow: 'none',
+      },
+      '&:focus-visible, &.Mui-focusVisible': {
+        outline: '2px solid #005C5A',
+        outlineOffset: '2px',
+      },
+      '@media (prefers-reduced-motion: reduce)': {
+        transition: 'none',
+      },
+    };
+  },
 
   headerDivider: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     flexWrap: 'wrap',
-    rowGap: 1,
+    rowGap: 0.75,
     columnGap: 1.5,
-    mt: 1,
+    mt: { xs: 0.5, sm: 1 },
   } as SxProps<Theme>,
 
   connectionBadge: (status: ConnectionStatus) => {

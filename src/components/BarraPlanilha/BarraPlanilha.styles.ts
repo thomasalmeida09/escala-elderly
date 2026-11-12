@@ -75,8 +75,8 @@ export const styles = {
       ? BARRA_PLANILHA_TOKENS.dropzoneActive.bg
       : BARRA_PLANILHA_TOKENS.surface.bg,
     color: BARRA_PLANILHA_TOKENS.surface.fg,
-    p: '14px 16px',
-    mb: 2.5,
+    p: { xs: '8px 10px', sm: '14px 16px' },
+    mb: { xs: 1, sm: 2.5 },
     borderRadius: '8px',
     border: isDragActive
       ? `2px dashed ${BARRA_PLANILHA_TOKENS.dropzoneActive.border}`
@@ -84,7 +84,7 @@ export const styles = {
     boxShadow: '0px 4px 20px rgba(45, 49, 46, 0.03)',
     display: 'flex',
     flexDirection: 'column',
-    gap: 1.25,
+    gap: { xs: 0.75, sm: 1.25 },
     minWidth: 0,
     transition: 'background-color 0.15s ease-in-out, border-color 0.15s ease-in-out',
     '@media (prefers-reduced-motion: reduce)': {
@@ -120,7 +120,7 @@ export const styles = {
     }`,
     borderRadius: '6px',
     px: 1,
-    py: 0.35,
+    py: { xs: 0.2, sm: 0.35 },
     fontSize: '0.72rem',
     fontWeight: 600,
     lineHeight: 1.35,

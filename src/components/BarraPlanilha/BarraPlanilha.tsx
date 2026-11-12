@@ -16,6 +16,7 @@ import { styles } from './BarraPlanilha.styles';
 export interface BarraPlanilhaProps {
   readonly cuidadores: readonly Cuidador[];
   readonly canUndoImport: boolean;
+  readonly privacyMode?: boolean;
   readonly onImportSchedule: (cuidadores: readonly Cuidador[]) => Promise<void>;
   readonly onUndoImport: () => Promise<boolean>;
 }
@@ -45,6 +46,7 @@ function formatImportErrorMessage(error: unknown): string {
 export default function BarraPlanilha({
   cuidadores,
   canUndoImport,
+  privacyMode = false,
   onImportSchedule,
   onUndoImport,
 }: BarraPlanilhaProps) {
@@ -240,14 +242,14 @@ export default function BarraPlanilha({
 
   const handleExportCsv = useCallback(() => {
     try {
-      const csvWithBom = serializeScheduleToCsv(cuidadores);
+      const csvWithBom = serializeScheduleToCsv(cuidadores, { privacyMode });
       if (typeof document === 'undefined' || typeof URL.createObjectURL !== 'function') {
         return;
       }
 
       const blob = new Blob([csvWithBom], { type: 'text/csv;charset=utf-8;' });
       const objectUrl = URL.createObjectURL(blob);
-      const filename = buildCsvBackupFilename();
+      const filename = buildCsvBackupFilename(new Date(), privacyMode);
 
       const anchor = document.createElement('a');
       anchor.href = objectUrl;
@@ -263,7 +265,9 @@ export default function BarraPlanilha({
 
       setFeedback({
         kind: 'success',
-        message: `Backup CSV exportado (${cuidadores.length} profissionais) com acentuação pronta para Excel.`,
+        message: privacyMode
+          ? `Planilha CSV LGPD exportada (${cuidadores.length} profissionais, contatos ocultos e nomes abreviados).`
+          : `Backup CSV exportado (${cuidadores.length} profissionais) com acentuação pronta para Excel.`,
       });
     } catch (exportError) {
       setFeedback({
@@ -271,7 +275,7 @@ export default function BarraPlanilha({
         message: formatImportErrorMessage(exportError),
       });
     }
-  }, [cuidadores]);
+  }, [cuidadores, privacyMode]);
 
   const handleOpenPdfStudio = useCallback(() => {
     setIsPdfStudioOpen(true);
@@ -370,7 +374,7 @@ export default function BarraPlanilha({
             <Box component="span" aria-hidden="true">
               {'📤'}
             </Box>
-            Exportar CSV / Backup
+            {privacyMode ? 'Exportar CSV (LGPD)' : 'Exportar CSV / Backup'}
           </Button>
 
           <Button
@@ -423,6 +427,7 @@ export default function BarraPlanilha({
         <ModalFolhaEscalaA4
           open={isPdfStudioOpen}
           cuidadores={cuidadores}
+          initialPrivacyMode={privacyMode}
           onClose={handleClosePdfStudio}
         />
       ) : null}

@@ -3,6 +3,11 @@ import {
   type CaregiverScheduleControllerOptions,
   createCaregiverScheduleController,
 } from '../services/caregiverSyncController';
+import {
+  type LocalFirstStore,
+  PRIVACY_MODE_STORAGE_KEY,
+  defaultLocalFirstStore,
+} from '../services/localFirstStore';
 import type { ConnectionStatus, Cuidador, StatusCuidador } from '../types/caregiver';
 
 export type { ConnectionStatus, Cuidador, StatusCuidador };
@@ -12,6 +17,7 @@ export interface UseCaregiversResult {
   readonly connectionStatus: ConnectionStatus;
   readonly pendingRemoteSync: boolean;
   readonly canUndoImport: boolean;
+  readonly privacyMode: boolean;
   readonly loading: boolean;
   readonly simularFaltaDoCarlos: () => void;
   readonly alternarStatusCuidador: (id: number) => void;
@@ -19,10 +25,24 @@ export interface UseCaregiversResult {
   readonly importarEscala: (cuidadores: readonly Cuidador[]) => Promise<void>;
   readonly desfazerImportacao: () => Promise<boolean>;
   readonly restaurarEscala: () => void;
+  readonly alternarModoPrivacidade: () => void;
+}
+
+export function syncPrivacyModeFromStorageEvent(
+  eventKey: string | null,
+  store: LocalFirstStore,
+  expectedKey: string = PRIVACY_MODE_STORAGE_KEY
+): boolean | null {
+  if (eventKey === null || eventKey === expectedKey) {
+    return store.readPrivacyMode();
+  }
+  return null;
 }
 
 export function useCaregivers(options?: CaregiverScheduleControllerOptions): UseCaregiversResult {
+  const store = options?.store ?? defaultLocalFirstStore;
   const [controller] = useState(() => createCaregiverScheduleController(options));
+  const [privacyMode, setPrivacyMode] = useState<boolean>(() => store.readPrivacyMode());
 
   const snapshot = useSyncExternalStore(
     controller.subscribe,
@@ -36,6 +56,28 @@ export function useCaregivers(options?: CaregiverScheduleControllerOptions): Use
       controller.dispose();
     };
   }, [controller]);
+
+  useEffect(() => {
+    if (
+      options?.eventTarget === null ||
+      typeof window === 'undefined' ||
+      typeof window.addEventListener !== 'function'
+    ) {
+      return undefined;
+    }
+
+    const handleStorageChange = (event: StorageEvent): void => {
+      const synced = syncPrivacyModeFromStorageEvent(event.key, store);
+      if (synced !== null) {
+        setPrivacyMode(synced);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [options?.eventTarget, store]);
 
   const simularFaltaDoCarlos = useCallback(() => {
     void controller.simulateCarlosAbsence();
@@ -70,11 +112,20 @@ export function useCaregivers(options?: CaregiverScheduleControllerOptions): Use
     void controller.resetSchedule();
   }, [controller]);
 
+  const alternarModoPrivacidade = useCallback(() => {
+    setPrivacyMode((prev) => {
+      const next = !prev;
+      store.writePrivacyMode(next);
+      return next;
+    });
+  }, [store]);
+
   return {
     cuidadores: snapshot.cuidadores,
     connectionStatus: snapshot.connectionStatus,
     pendingRemoteSync: snapshot.pendingRemoteSync,
     canUndoImport: snapshot.canUndoImport,
+    privacyMode,
     loading: false,
     simularFaltaDoCarlos,
     alternarStatusCuidador,
@@ -82,5 +133,6 @@ export function useCaregivers(options?: CaregiverScheduleControllerOptions): Use
     importarEscala,
     desfazerImportacao,
     restaurarEscala,
+    alternarModoPrivacidade,
   };
 }

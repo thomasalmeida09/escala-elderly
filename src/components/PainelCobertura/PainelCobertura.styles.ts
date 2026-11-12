@@ -39,6 +39,11 @@ export const PAINEL_COBERTURA_TOKENS = {
     fg: '#92400E',
     border: '#FCD34D',
   },
+  privacyPhoneBadge: {
+    bg: '#F1F5F9',
+    fg: '#1E293B',
+    border: '#64748B',
+  },
 } as const;
 
 export const styles = {
@@ -169,6 +174,26 @@ export const styles = {
   buttonIcon: {
     mr: 0.65,
     display: 'inline-block',
+  } as SxProps<Theme>,
+
+  privacyPhoneBadge: {
+    flex: '1 1 156px',
+    minHeight: '38px',
+    px: 1.5,
+    py: 0.75,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    bgcolor: PAINEL_COBERTURA_TOKENS.privacyPhoneBadge.bg,
+    color: PAINEL_COBERTURA_TOKENS.privacyPhoneBadge.fg,
+    border: `1px solid ${PAINEL_COBERTURA_TOKENS.privacyPhoneBadge.border}`,
+    borderRadius: '6px',
+    fontSize: '0.76rem',
+    fontWeight: 700,
+    lineHeight: 1.25,
+    whiteSpace: 'normal',
+    textAlign: 'center',
+    overflowWrap: 'anywhere',
   } as SxProps<Theme>,
 
   whatsAppButton: {
