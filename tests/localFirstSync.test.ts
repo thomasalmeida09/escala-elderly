@@ -617,7 +617,7 @@ describe('FE #2 — Canonical Caregiver Contract, Local-First Store & Hybrid Syn
   });
 
   describe('5. FE #5 — Dual-Layer Multiplayer Controller Orchestration (BroadcastChannel + SSE + Anti-Clobber)', () => {
-    function createInMemoryBroadcastHub() {
+    function createInMemoryBroadcastHub(hubOptions?: { readonly asyncDelivery?: boolean }) {
       const peersByChannel = new Map<string, Set<MockPeer>>();
       let totalCreated = 0;
 
@@ -653,16 +653,23 @@ describe('FE #2 — Canonical Caregiver Contract, Local-First Store & Hybrid Syn
               throw new DOMException('Channel is closed', 'InvalidStateError');
             }
             const cloned = structuredClone(rawMessage);
-            for (const other of channelSet!) {
-              if (other === peer || other.isClosed()) {
-                continue;
+            const dispatchToPeers = (): void => {
+              for (const other of channelSet!) {
+                if (other === peer || other.isClosed()) {
+                  continue;
+                }
+                const evt: BroadcastMessageEventLike = { data: structuredClone(cloned) };
+                for (const fn of otherListenersMap.get(other) ?? []) {
+                  fn(evt);
+                }
+                other.onmessage?.(evt);
               }
-              const evt: BroadcastMessageEventLike = { data: structuredClone(cloned) };
-              for (const fn of otherListenersMap.get(other) ?? []) {
-                fn(evt);
-              }
-              other.onmessage?.(evt);
+            };
+            if (hubOptions?.asyncDelivery) {
+              queueMicrotask(dispatchToPeers);
+              return;
             }
+            dispatchToPeers();
           },
           close() {
             if (closed) {
@@ -1454,6 +1461,224 @@ describe('FE #2 — Canonical Caregiver Contract, Local-First Store & Hybrid Syn
       expect(sseHub.getActiveSocketCount()).toBe(0);
       expect(registered).toEqual(['online', 'offline', 'online', 'offline']);
       expect(removed).toEqual(['offline', 'online', 'offline', 'online']);
+    });
+
+    it('5.8 prevents POST /batch server clobber on simultaneous in-flight cross-tab clicks, protects in-flight CSV undoBackup, and avoids cold-boot checking deadlock', async () => {
+      const hub = createInMemoryBroadcastHub({ asyncDelivery: true });
+      let serverRoster = getCanonicalSeed();
+      let batchCalls = 0;
+      let holdNextBatchImport = false;
+
+      let resolvePatch1: (() => void) | null = null;
+      let resolvePatch4: (() => void) | null = null;
+      let resolveBatchImport: (() => void) | null = null;
+
+      const sharedOnlineApi: ReturnType<typeof createCaregiverApiClient> = {
+        baseUrl: DEFAULT_API_BASE_URL,
+        fetchCaregivers: async () => serverRoster,
+        syncCaregiversBatch: async (items) => {
+          batchCalls += 1;
+          if (holdNextBatchImport) {
+            holdNextBatchImport = false;
+            await new Promise<void>((resolve) => {
+              resolveBatchImport = resolve;
+            });
+            resolveBatchImport = null;
+          }
+          serverRoster = [...items];
+          return serverRoster;
+        },
+        resetCaregiversSchedule: async () => {
+          serverRoster = getCanonicalSeed();
+          return serverRoster;
+        },
+        patchCaregiverStatus: (id, status, substituto) =>
+          new Promise<Cuidador>((resolve) => {
+            const completePatch = (): void => {
+              serverRoster = serverRoster.map((c) =>
+                c.id === id ? applyStatusChange(c, status, substituto) : c
+              );
+              resolve(serverRoster.find((c) => c.id === id)!);
+            };
+            if (id === 1) {
+              resolvePatch1 = completePatch;
+            } else if (id === 4) {
+              resolvePatch4 = completePatch;
+            } else {
+              completePatch();
+            }
+          }),
+      };
+
+      const tabA = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: null }),
+        api: sharedOnlineApi,
+        eventTarget: null,
+        broadcastChannelFactory: hub.factory,
+      });
+      const tabB = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: null }),
+        api: sharedOnlineApi,
+        eventTarget: null,
+        broadcastChannelFactory: hub.factory,
+      });
+
+      tabA.start();
+      tabB.start();
+      await vi.waitFor(() => {
+        expect(tabA.getSnapshot().connectionStatus).toBe('online');
+        expect(tabB.getSnapshot().connectionStatus).toBe('online');
+      });
+
+      // 1. Both tabs click simultaneously (same tick before W3C BroadcastChannel async task delivery)
+      // while BOTH HTTP PATCH requests remain in-flight!
+      const p1 = tabA.toggleCaregiverStatus(1); // Ana -> Faltou
+      const p4 = tabB.toggleCaregiverStatus(4); // Mariana -> Faltou
+
+      // Flush BroadcastChannel microtasks so both tabs buffer the sibling's optimistic SCHEDULE_SYNC in deferredCrossTabPayload
+      await Promise.resolve();
+
+      resolvePatch1!();
+      await p1;
+      resolvePatch4!();
+      await p4;
+
+      // Neither tab may issue POST /batch to clobber the sibling's confirmed server PATCH!
+      expect(batchCalls).toBe(0);
+      await vi.waitFor(() => {
+        expect(serverRoster.find((c) => c.id === 1)?.status).toBe('Faltou');
+        expect(serverRoster.find((c) => c.id === 4)?.status).toBe('Faltou');
+        expect(tabA.getSnapshot().cuidadores.find((c) => c.id === 1)?.status).toBe('Faltou');
+        expect(tabA.getSnapshot().cuidadores.find((c) => c.id === 4)?.status).toBe('Faltou');
+        expect(tabB.getSnapshot().cuidadores.find((c) => c.id === 1)?.status).toBe('Faltou');
+        expect(tabB.getSnapshot().cuidadores.find((c) => c.id === 4)?.status).toBe('Faltou');
+        expect(tabA.getSnapshot().pendingRemoteSync).toBe(false);
+        expect(tabB.getSnapshot().pendingRemoteSync).toBe(false);
+      });
+
+      // 2. While Tab B is mid-flight in importCaregiversBatch (POST /batch), a concurrent pre-import SCHEDULE_SYNC
+      // with canUndoImport: false from Tab A MUST NOT wipe Tab B's newly created undoBackup!
+      const importedList = [
+        parseCuidador({
+          id: 99,
+          nome: 'Helena Costa',
+          status: 'Presente',
+          turno: 'Diurno (07h-19h)',
+          quarto: 'Quarto 12',
+        }),
+      ];
+      holdNextBatchImport = true;
+      const p3 = tabA.simulateCarlosAbsence(); // Queues pre-import SCHEDULE_SYNC(canUndoImport: false) on microtask!
+      const importPromise = tabB.importCaregiversBatch(importedList); // Starts POST /batch before microtask arrives!
+      await vi.waitFor(() => {
+        expect(resolveBatchImport).not.toBeNull();
+      });
+
+      resolveBatchImport!();
+      await importPromise;
+      await p3;
+
+      await vi.waitFor(() => {
+        expect(tabB.getSnapshot().canUndoImport).toBe(true);
+      });
+
+      tabA.dispose();
+      tabB.dispose();
+
+      // 3. Cold-boot multi-tab StorageEvent & offline cross-tab edit never strand passive tab in 'checking'
+      const storageTarget = new EventTarget();
+      const sharedMem = createMemoryStorage();
+      let resolveColdBootTab2: ((items: Cuidador[]) => void) | null = null;
+      let coldBootTab2Signal: AbortSignal | undefined;
+
+      const coldTab2 = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: sharedMem.adapter }),
+        api: {
+          baseUrl: DEFAULT_API_BASE_URL,
+          fetchCaregivers: (signal) => {
+            coldBootTab2Signal = signal;
+            return new Promise<Cuidador[]>((resolve) => {
+              resolveColdBootTab2 = resolve;
+            });
+          },
+          syncCaregiversBatch: async (items) => [...items],
+          resetCaregiversSchedule: async () => getCanonicalSeed(),
+          patchCaregiverStatus: async (id, status) =>
+            applyStatusChange(
+              getCanonicalSeed().find((c) => c.id === id)!,
+              status
+            ),
+        },
+        eventTarget: null,
+        broadcastChannelFactory: null,
+        storageEventTarget: storageTarget,
+      });
+
+      coldTab2.start();
+      expect(coldTab2.getSnapshot().connectionStatus).toBe('checking');
+
+      // Tab 1 finishes boot GET first and writes identical canonical seed to shared localStorage -> fires StorageEvent
+      const tab1Store = createLocalFirstStore({ storage: sharedMem.adapter });
+      const writtenSeed = tab1Store.writeSnapshot(getCanonicalSeed(), false);
+      storageTarget.dispatchEvent(
+        Object.assign(new Event('storage'), {
+          key: SCHEDULE_STORAGE_KEY,
+          newValue: JSON.stringify(writtenSeed),
+        })
+      );
+
+      // Cold-boot guard keeps Tab 2's boot GET alive so Tab 2 resolves cleanly to 'online'
+      expect(coldBootTab2Signal?.aborted).toBe(false);
+      resolveColdBootTab2!(getCanonicalSeed());
+      await vi.waitFor(() => {
+        expect(coldTab2.getSnapshot().connectionStatus).toBe('online');
+      });
+      coldTab2.dispose();
+
+      // Offline boot: Tab 3's boot GET hangs while offline Tab 4 broadcasts an edit -> Tab 3 exits 'checking' -> 'local-first'
+      const offlineHub = createInMemoryBroadcastHub();
+      const offlineTab3 = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: null }),
+        api: {
+          baseUrl: DEFAULT_API_BASE_URL,
+          fetchCaregivers: (signal) =>
+            new Promise<Cuidador[]>((_resolve, reject) => {
+              signal?.addEventListener('abort', () => {
+                reject(new CaregiverApiError('Aborted', 'aborted'));
+              });
+            }),
+          syncCaregiversBatch: async (items) => [...items],
+          resetCaregiversSchedule: async () => getCanonicalSeed(),
+          patchCaregiverStatus: async () => {
+            throw new CaregiverApiError('Offline', 'network');
+          },
+        },
+        eventTarget: null,
+        broadcastChannelFactory: offlineHub.factory,
+      });
+      const offlineTab4 = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: null }),
+        api: createCaregiverApiClient({
+          fetchImpl: async () => {
+            throw new TypeError('Offline');
+          },
+        }),
+        eventTarget: null,
+        broadcastChannelFactory: offlineHub.factory,
+      });
+
+      offlineTab3.start();
+      offlineTab4.start();
+      expect(offlineTab3.getSnapshot().connectionStatus).toBe('checking');
+
+      await offlineTab4.simulateCarlosAbsence();
+      expect(
+        offlineTab3.getSnapshot().cuidadores.find((c) => c.id === CARLOS_ROCHA_ID)?.status
+      ).toBe('Faltou');
+      expect(offlineTab3.getSnapshot().connectionStatus).toBe('local-first');
+
+      offlineTab3.dispose();
+      offlineTab4.dispose();
     });
   });
 });
