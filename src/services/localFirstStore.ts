@@ -3,6 +3,7 @@ import { type Cuidador, parseCuidadorList } from '../types/caregiver';
 
 export const SCHEDULE_STORAGE_KEY = 'escala_elderly:schedule:v1';
 export const UNDO_IMPORT_STORAGE_KEY = 'escala_elderly:undo_backup:v1';
+export const PRIVACY_MODE_STORAGE_KEY = 'escala_elderly:privacy_mode:v1';
 export const SCHEDULE_SCHEMA_VERSION = 1;
 
 export interface StorageAdapter {
@@ -24,6 +25,12 @@ export interface PersistedUndoBackupEnvelope {
   readonly cuidadores: Cuidador[];
 }
 
+export interface PersistedPrivacyModeEnvelope {
+  readonly schemaVersion: typeof SCHEDULE_SCHEMA_VERSION;
+  readonly enabled: boolean;
+  readonly updatedAtIso: string;
+}
+
 export type HydrationSource = 'storage' | 'seed' | 'purged-corrupt';
 
 export interface HydratedScheduleState {
@@ -36,6 +43,7 @@ export interface LocalFirstStoreOptions {
   readonly storage?: StorageAdapter | null;
   readonly storageKey?: string;
   readonly undoStorageKey?: string;
+  readonly privacyStorageKey?: string;
   readonly nowIso?: () => string;
 }
 
@@ -48,6 +56,8 @@ export interface LocalFirstStore {
   readUndoBackup(): PersistedUndoBackupEnvelope | null;
   writeUndoBackup(cuidadores: readonly Cuidador[]): PersistedUndoBackupEnvelope;
   clearUndoBackup(): void;
+  readPrivacyMode(): boolean;
+  writePrivacyMode(enabled: boolean): boolean;
   clear(): void;
 }
 
@@ -81,6 +91,7 @@ function isEnvelopeCandidate(value: unknown): value is Record<string, unknown> {
 export function createLocalFirstStore(options: LocalFirstStoreOptions = {}): LocalFirstStore {
   const storageKey = options.storageKey ?? SCHEDULE_STORAGE_KEY;
   const undoStorageKey = options.undoStorageKey ?? UNDO_IMPORT_STORAGE_KEY;
+  const privacyStorageKey = options.privacyStorageKey ?? PRIVACY_MODE_STORAGE_KEY;
   const nowIso = options.nowIso ?? (() => new Date().toISOString());
   const fallbackMemory = new Map<string, string>();
   const resolveStorage = (): StorageAdapter | null =>
@@ -235,9 +246,48 @@ export function createLocalFirstStore(options: LocalFirstStoreOptions = {}): Loc
     safeRemoveRaw(undoStorageKey);
   }
 
+  function readPrivacyMode(): boolean {
+    const raw = safeReadRaw(privacyStorageKey);
+    if (raw === null) {
+      return false;
+    }
+
+    try {
+      const decoded: unknown = JSON.parse(raw);
+      if (
+        !isEnvelopeCandidate(decoded) ||
+        decoded.schemaVersion !== SCHEDULE_SCHEMA_VERSION ||
+        typeof decoded.enabled !== 'boolean' ||
+        typeof decoded.updatedAtIso !== 'string' ||
+        decoded.updatedAtIso.trim().length === 0
+      ) {
+        safeRemoveRaw(privacyStorageKey);
+        return false;
+      }
+
+      return decoded.enabled;
+    } catch (corruptPrivacyError) {
+      void corruptPrivacyError;
+      safeRemoveRaw(privacyStorageKey);
+      return false;
+    }
+  }
+
+  function writePrivacyMode(enabled: boolean): boolean {
+    const normalized = Boolean(enabled);
+    const envelope: PersistedPrivacyModeEnvelope = Object.freeze({
+      schemaVersion: SCHEDULE_SCHEMA_VERSION,
+      enabled: normalized,
+      updatedAtIso: nowIso(),
+    });
+    safeWriteRaw(privacyStorageKey, JSON.stringify(envelope));
+    return normalized;
+  }
+
   function clear(): void {
     safeRemoveRaw(storageKey);
     safeRemoveRaw(undoStorageKey);
+    safeRemoveRaw(privacyStorageKey);
   }
 
   return {
@@ -246,6 +296,8 @@ export function createLocalFirstStore(options: LocalFirstStoreOptions = {}): Loc
     readUndoBackup,
     writeUndoBackup,
     clearUndoBackup,
+    readPrivacyMode,
+    writePrivacyMode,
     clear,
   };
 }
