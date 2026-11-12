@@ -1104,4 +1104,48 @@ describe('FE #2 & FE #7 — Dashboard, CardCuidador & PainelCobertura SSR Semant
     expect(syncPrivacyModeFromStorageEvent(PRIVACY_MODE_STORAGE_KEY, lgpdStore)).toBe(false);
     expect(syncPrivacyModeFromStorageEvent(null, lgpdStore)).toBe(false);
   });
+
+  it('11. enforces FE #5 multiplayer hook purity (M4.1), SSR zero-socket construction safety (M5.3), and StrictMode privacy subscription survival (S18..S20)', () => {
+    let broadcastConstructedDuringSsr = 0;
+    let sseConstructedDuringSsr = 0;
+
+    const ssrHtml = renderToStaticMarkup(
+      <ThemeProvider theme={warmCareTheme}>
+        <Dashboard
+          controllerOptions={{
+            store: createLocalFirstStore({ storage: null }),
+            eventTarget: null,
+            broadcastChannelFactory: () => {
+              broadcastConstructedDuringSsr += 1;
+              return null;
+            },
+            eventSourceFactory: () => {
+              sseConstructedDuringSsr += 1;
+              return null;
+            },
+          }}
+        />
+      </ThemeProvider>
+    );
+
+    // M5.3 / S18: Synchronous SSR render MUST NEVER allocate BroadcastChannel or EventSource sockets!
+    expect(broadcastConstructedDuringSsr).toBe(0);
+    expect(sseConstructedDuringSsr).toBe(0);
+    expect(ssrHtml).toMatch(/<h1[^>]*>DASHBOARD<\/h1>/);
+    expect(ssrHtml).toContain('role="status"');
+    expect(ssrHtml).toContain('aria-live="polite"');
+    expect(ssrHtml).toContain('SINCRONIZANDO...');
+
+    // M4.1 / S19: Verify useCaregivers.ts keeps side effects (writePrivacyMode + publishPrivacyMode)
+    // strictly OUTSIDE setPrivacyMode(...) state updater so React 19 <StrictMode> never double-broadcasts!
+    const useCaregiversSource = fs.readFileSync(
+      path.join(frontendRoot, 'src/hooks/useCaregivers.ts'),
+      'utf8'
+    );
+    expect(useCaregiversSource).toContain('controller.subscribePrivacyMode');
+    expect(useCaregiversSource).toContain('controller.publishPrivacyMode(next)');
+    expect(useCaregiversSource).not.toMatch(
+      /setPrivacyMode\(\s*\([^)]*\)\s*=>\s*\{[\s\S]*?(?:writePrivacyMode|publishPrivacyMode)/
+    );
+  });
 });
