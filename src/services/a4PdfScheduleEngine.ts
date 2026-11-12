@@ -1,10 +1,13 @@
 import type { Cuidador, StatusCuidador } from '../types/caregiver';
 import { hydrateCanonicalCaregiverMetadata } from './coverageEngine';
+import { maskPersonNameLgpd } from './lgpdPrivacyEngine';
 import {
   type ParsedVectorSignature,
   parseSigV1,
   signatureToPdfPathOperators,
 } from './vectorSignatureProtocol';
+
+export { maskPersonNameLgpd } from './lgpdPrivacyEngine';
 
 export const PT_PER_MM = 72 / 25.4;
 export const PX_PER_MM = 96 / 25.4;
@@ -128,8 +131,6 @@ export interface A4ScheduleDocumentModel {
   readonly sha256Hex: string;
   readonly pages: readonly A4PageDisplayList[];
 }
-
-const PT_BR_NAME_PARTICLES: ReadonlySet<string> = new Set(['da', 'de', 'do', 'das', 'dos', 'e']);
 
 /**
  * Mapa bidirecional dos 27 codepoints imprimiveis da faixa 0x80..0x9F da codificacao
@@ -838,31 +839,6 @@ export function solveTextBoxAutoFit(
   });
 }
 
-/**
- * Pseudonimiza nomes civis para o Modo Mural Publico LGPD:
- * - "Carlos Rocha" -> "Carlos R."
- * - "João da Conceição" -> "João C." (ignora preposicoes PT-BR da/de/do/das/dos/e)
- * - "Ana" -> "Ana" (M4 / S12 / S13).
- */
-export function maskPersonNameLgpd(rawName: string): string {
-  const clean = sanitizeWinAnsiText(rawName);
-  if (clean.length === 0) {
-    return '—';
-  }
-  const tokens = clean.split(' ').filter((t) => t.length > 0);
-  if (tokens.length <= 1) {
-    return tokens[0]!;
-  }
-
-  const firstName = tokens[0]!;
-  const substantiveSurname =
-    tokens.slice(1).find((token) => !PT_BR_NAME_PARTICLES.has(token.toLowerCase())) ??
-    tokens[tokens.length - 1]!;
-
-  const initial = [...substantiveSurname][0]?.toUpperCase() ?? '';
-  return initial.length > 0 ? `${firstName} ${initial}.` : firstName;
-}
-
 export interface ProjectedScheduleCaregiver {
   readonly id: number;
   readonly displayName: string;
@@ -879,7 +855,7 @@ export function formatCaregiverForSchedule(
 ): ProjectedScheduleCaregiver {
   const hydrated = privacyMode ? cuidador : hydrateCanonicalCaregiverMetadata(cuidador);
   const displayName = privacyMode
-    ? maskPersonNameLgpd(hydrated.nome)
+    ? sanitizeWinAnsiText(maskPersonNameLgpd(hydrated.nome)) || '—'
     : sanitizeWinAnsiText(hydrated.nome);
   const turnoText = hydrated.turno ? sanitizeWinAnsiText(hydrated.turno) : 'Turno padrão';
   const quartoText = hydrated.quarto ? sanitizeWinAnsiText(hydrated.quarto) : 'Posto geral';
@@ -894,7 +870,7 @@ export function formatCaregiverForSchedule(
   let contactOrCoverageText: string;
   if (hydrated.status === 'Cobertura' && hydrated.substituto) {
     const displaySub = privacyMode
-      ? maskPersonNameLgpd(hydrated.substituto)
+      ? sanitizeWinAnsiText(maskPersonNameLgpd(hydrated.substituto)) || '—'
       : sanitizeWinAnsiText(hydrated.substituto);
     if (privacyMode) {
       contactOrCoverageText = `Cob.: ${displaySub} • Tel: Restrito (LGPD)`;

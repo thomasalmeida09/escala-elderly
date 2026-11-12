@@ -100,7 +100,8 @@ escala-elderly/
 │   │   ├── coverageEngine.ts                    # Motor determinístico de cobertura CLT (>=11h) e WhatsApp wa.me
 │   │   ├── csvScheduleCodec.ts                  # Codec tabular RFC 4180 / Excel PT-BR, anti-CSV Injection e BOM
 │   │   ├── financialKpiEngine.ts                # Motor contábil O(N) em centavos inteiros, anti-Simpson e LGPD
-│   │   ├── localFirstStore.ts                   # Persistência síncrona 0ms (schedule:v1 + undo_backup:v1)
+│   │   ├── lgpdPrivacyEngine.ts                 # Motor puro de pseudonimização PT-BR e projeção LGPD read-time
+│   │   ├── localFirstStore.ts                   # Persistência síncrona 0ms (schedule:v1 + undo:v1 + privacy:v1)
 │   │   └── vectorSignatureProtocol.ts           # Protocolo vetorial sigv1 + simplificação RDP e síntese por teclado
 │   ├── theme/
 │   │   └── theme.ts                             # Tokens visuais do tema "warmCareTheme" (MUI)
@@ -115,6 +116,7 @@ escala-elderly/
 │   ├── dashboardUiContract.test.tsx             # Suíte SSR de semântica HTML5, WCAG 2.2 AA e StrictMode
 │   ├── financialKpiEngine.test.ts               # Suíte unitária de KPIs em centavos, clamping e reconciliação PDF
 │   ├── governanceHygiene.test.ts                # Fitness Functions de CI, ADRs, Árvore e Clean-Room/LGPD
+│   ├── lgpdPrivacyMode.test.ts                  # Suíte unitária de paridade LGPD, persistência F5 e CSV/PDF redigido
 │   ├── localFirstSync.test.ts                   # Suíte unitária de contrato, Local-First Store e concorrência API
 │   └── smartCoverage.test.ts                    # Suíte unitária de elegibilidade CLT Art. 66, wa.me e alocação
 ├── .editorconfig                                # Padrão UTF-8 sem BOM e quebras de linha LF

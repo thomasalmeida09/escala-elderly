@@ -10,6 +10,7 @@ import {
   parseCuidadorList,
 } from '../types/caregiver';
 import { normalizeWhatsAppPhone } from './coverageEngine';
+import { projectCaregiverForLgpd } from './lgpdPrivacyEngine';
 
 export const MAX_CSV_BYTES = 1_048_576;
 
@@ -82,6 +83,7 @@ export interface ParsedCsvScheduleResult {
 export interface SerializeScheduleCsvOptions {
   readonly delimiter?: CsvDelimiter;
   readonly includeBom?: boolean;
+  readonly privacyMode?: boolean;
 }
 
 interface TokenizedCsvRow {
@@ -1412,11 +1414,15 @@ export function serializeScheduleToCsv(
 ): string {
   const delimiter = options.delimiter ?? ';';
   const includeBom = options.includeBom ?? true;
+  const privacyMode = options.privacyMode ?? false;
   const validated = parseCuidadorList(cuidadores, 'export.cuidadores');
+  const rowsToExport = privacyMode
+    ? validated.map((cuidador) => projectCaregiverForLgpd(cuidador, true))
+    : validated;
 
   const lines: string[] = [CSV_CANONICAL_HEADERS.join(delimiter)];
 
-  for (const cuidador of validated) {
+  for (const cuidador of rowsToExport) {
     const rowCells = [
       escapeCsvCellForExport(cuidador.id, delimiter),
       escapeCsvCellForExport(cuidador.nome, delimiter),
@@ -1437,9 +1443,13 @@ export function serializeScheduleToCsv(
   return includeBom ? `\uFEFF${csvBody}` : csvBody;
 }
 
-export function buildCsvBackupFilename(referenceDate: Date = new Date()): string {
+export function buildCsvBackupFilename(
+  referenceDate: Date = new Date(),
+  privacyMode: boolean = false
+): string {
   const year = referenceDate.getFullYear();
   const month = String(referenceDate.getMonth() + 1).padStart(2, '0');
   const day = String(referenceDate.getDate()).padStart(2, '0');
-  return `escala-cuidadores-${year}-${month}-${day}.csv`;
+  const lgpdSuffix = privacyMode ? '-lgpd' : '';
+  return `escala-cuidadores-${year}-${month}-${day}${lgpdSuffix}.csv`;
 }
