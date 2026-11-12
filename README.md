@@ -103,6 +103,7 @@ escala-elderly/
 │   │   ├── financialKpiEngine.ts                # Motor contábil O(N) em centavos inteiros, anti-Simpson e LGPD
 │   │   ├── lgpdPrivacyEngine.ts                 # Motor puro de pseudonimização PT-BR e projeção LGPD read-time
 │   │   ├── localFirstStore.ts                   # Persistência síncrona 0ms (schedule:v1 + undo:v1 + privacy:v1)
+│   │   ├── multiplayerSyncEngine.ts             # Motor multiplayer BroadcastChannel (<5ms) e cliente W3C SSE
 │   │   └── vectorSignatureProtocol.ts           # Protocolo vetorial sigv1 + simplificação RDP e síntese por teclado
 │   ├── theme/
 │   │   └── theme.ts                             # Tokens visuais do tema "warmCareTheme" (MUI)
@@ -119,6 +120,7 @@ escala-elderly/
 │   ├── governanceHygiene.test.ts                # Fitness Functions de CI, ADRs, Árvore e Clean-Room/LGPD
 │   ├── lgpdPrivacyMode.test.ts                  # Suíte unitária de paridade LGPD, persistência F5 e CSV/PDF redigido
 │   ├── localFirstSync.test.ts                   # Suíte unitária de contrato, Local-First Store e concorrência API
+│   ├── multiplayerSync.test.ts                  # Suíte unitária BroadcastChannel, deduplicação LRU e SSE backoff
 │   └── smartCoverage.test.ts                    # Suíte unitária de elegibilidade CLT Art. 66, wa.me e alocação
 ├── .editorconfig                                # Padrão UTF-8 sem BOM e quebras de linha LF
 ├── .gitattributes                               # Normalização determinística de LF no Git
