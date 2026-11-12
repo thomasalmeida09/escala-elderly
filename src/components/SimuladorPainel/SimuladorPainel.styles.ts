@@ -11,8 +11,8 @@ export const SIMULADOR_BUTTON_TOKENS = {
 export const styles = {
   controlPanel: {
     bgcolor: 'background.paper',
-    p: '16px 20px',
-    mb: 2,
+    p: { xs: '8px 12px', sm: '16px 20px' },
+    mb: { xs: 1, sm: 2 },
     borderRadius: '8px',
     boxShadow: '0px 4px 20px rgba(45, 49, 46, 0.03)',
     border: '1px solid',
@@ -21,7 +21,7 @@ export const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: 1.5,
+    gap: { xs: 0.75, sm: 1.5 },
   } as SxProps<Theme>,
 
   panelLabel: {

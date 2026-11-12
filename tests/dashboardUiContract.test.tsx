@@ -15,7 +15,10 @@ import {
   styles as barraPlanilhaStyles,
 } from '../src/components/BarraPlanilha/BarraPlanilha.styles';
 import CardCuidador from '../src/components/CardCuidador/CardCuidador';
-import { CARD_STATUS_TOKENS } from '../src/components/CardCuidador/CardCuidador.styles';
+import {
+  CARD_STATUS_TOKENS,
+  styles as cardCuidadorStyles,
+} from '../src/components/CardCuidador/CardCuidador.styles';
 import ModalFolhaEscalaA4, {
   FolhaEscalaA4Document,
 } from '../src/components/ModalFolhaEscalaA4/ModalFolhaEscalaA4';
@@ -26,8 +29,13 @@ import {
 import PainelCobertura from '../src/components/PainelCobertura/PainelCobertura';
 import { PAINEL_COBERTURA_TOKENS } from '../src/components/PainelCobertura/PainelCobertura.styles';
 import { SIMULADOR_BUTTON_TOKENS } from '../src/components/SimuladorPainel/SimuladorPainel.styles';
+import { syncPrivacyModeFromStorageEvent } from '../src/hooks/useCaregivers';
 import Dashboard from '../src/pages/Dashboard';
-import { CONNECTION_BADGE_TOKENS } from '../src/pages/Dashboard.styles';
+import {
+  CONNECTION_BADGE_TOKENS,
+  DASHBOARD_PRIVACY_TOKENS,
+  styles as dashboardStyles,
+} from '../src/pages/Dashboard.styles';
 import {
   buildA4ScheduleDocumentModel,
   isModalDialogOpen,
@@ -39,6 +47,7 @@ import {
   createCaregiverScheduleController,
 } from '../src/services/caregiverSyncController';
 import {
+  PRIVACY_MODE_STORAGE_KEY,
   SCHEDULE_STORAGE_KEY,
   type StorageAdapter,
   UNDO_IMPORT_STORAGE_KEY,
@@ -875,5 +884,224 @@ describe('FE #2 & FE #7 — Dashboard, CardCuidador & PainelCobertura SSR Semant
 
     // Unused-import guard check on barraPlanilhaStyles existing import
     expect(barraPlanilhaStyles.actionsRow).toBeDefined();
+  });
+
+  it('10. enforces FE #6 end-to-end LGPD Privacy Mode across Dashboard, CardCuidador, PainelCobertura (eligible & exhausted), BarraPlanilha, and ModalFolhaEscalaA4 with zero side-channel leaks (S08..S12, S14, S17..S19)', () => {
+    // S18: WCAG 2.2 AA sRGB contrast across DASHBOARD_PRIVACY_TOKENS & PAINEL_COBERTURA_TOKENS.privacyPhoneBadge
+    for (const [stateKey, tok] of Object.entries(DASHBOARD_PRIVACY_TOKENS)) {
+      expect(
+        wcagContrastRatio(tok.fg, tok.bg),
+        `Dashboard privacy "${stateKey}" text (${tok.fg} on ${tok.bg}) must exceed 4.5:1`
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(
+        wcagContrastRatio(tok.fg, tok.hoverBg),
+        `Dashboard privacy "${stateKey}" hover (${tok.fg} on ${tok.hoverBg}) must exceed 4.5:1`
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(
+        wcagContrastRatio(tok.border, '#F9F8F6'),
+        `Dashboard privacy "${stateKey}" border (${tok.border} on #F9F8F6) must exceed 3.0:1`
+      ).toBeGreaterThanOrEqual(3.0);
+    }
+    expect(
+      wcagContrastRatio(
+        DASHBOARD_PRIVACY_TOKENS.inactive.border,
+        DASHBOARD_PRIVACY_TOKENS.inactive.bg
+      )
+    ).toBeGreaterThanOrEqual(3.0);
+
+    const phoneBadgeTok = PAINEL_COBERTURA_TOKENS.privacyPhoneBadge;
+    expect(wcagContrastRatio(phoneBadgeTok.fg, phoneBadgeTok.bg)).toBeGreaterThanOrEqual(4.5);
+    expect(wcagContrastRatio(phoneBadgeTok.border, phoneBadgeTok.bg)).toBeGreaterThanOrEqual(3.0);
+    expect(wcagContrastRatio(phoneBadgeTok.border, '#FFFFFF')).toBeGreaterThanOrEqual(3.0);
+    expect(
+      wcagContrastRatio(phoneBadgeTok.border, PAINEL_COBERTURA_TOKENS.exhaustedAlert.bg)
+    ).toBeGreaterThanOrEqual(3.0);
+
+    // S18 & S19: Zero white-on-white background-color transition flash + 44px mobile touch target + CardCuidador overflowWrap
+    for (const activeState of [false, true]) {
+      const btnStyle = dashboardStyles.privacyToggleButton(activeState) as Record<string, unknown>;
+      expect(btnStyle.minHeight).toEqual({ xs: '44px', sm: '36px' });
+      expect(String(btnStyle.transition)).not.toContain('background-color');
+      expect(String(btnStyle.transition)).not.toContain('all');
+      expect(btnStyle['@media (prefers-reduced-motion: reduce)']).toEqual({ transition: 'none' });
+    }
+
+    const infoGroupStyle = cardCuidadorStyles.infoGroup as Record<string, unknown>;
+    expect(infoGroupStyle.minWidth).toBe(0);
+    expect(infoGroupStyle.maxWidth).toBe('100%');
+    for (const textKey of ['caregiverName', 'metaLine', 'coverageNote'] as const) {
+      const textStyle = cardCuidadorStyles[textKey] as Record<string, unknown>;
+      expect(textStyle.overflowWrap).toBe('anywhere');
+      expect(textStyle.maxWidth).toBe('100%');
+    }
+
+    // S08: CardCuidador masks titular, substituto, AND aria-label (WCAG 2.5.3 Label-in-Name)
+    const coveredCarlos = parseCuidador({
+      id: 3,
+      nome: 'Carlos Rocha',
+      status: 'Cobertura',
+      turno: 'Noturno (19h-07h)',
+      quarto: 'Quarto 03',
+      telefone: '+55 11 90000-0103',
+      substituto: 'Beatriz Alves',
+    });
+    const cardLgpdHtml = renderToStaticMarkup(
+      <ThemeProvider theme={warmCareTheme}>
+        <CardCuidador cuidador={coveredCarlos} privacyMode onToggleStatus={() => undefined} />
+      </ThemeProvider>
+    );
+    expect(cardLgpdHtml).toContain('Carlos R.');
+    expect(cardLgpdHtml).toContain('Cobertura: Beatriz A.');
+    expect(cardLgpdHtml).toMatch(/aria-label="Carlos R\. — .*?Substituto: Beatriz A\./);
+    expect(cardLgpdHtml).not.toContain('Rocha');
+    expect(cardLgpdHtml).not.toContain('Alves');
+    expect(cardLgpdHtml).not.toContain('90000');
+
+    // Default Dashboard boot (privacyMode = false) renders aria-pressed="false" and "Privacidade LGPD: Inativa"
+    const defaultStore = createLocalFirstStore({ storage: null });
+    const defaultDashHtml = renderToStaticMarkup(
+      <ThemeProvider theme={warmCareTheme}>
+        <Dashboard controllerOptions={{ store: defaultStore, eventTarget: null }} />
+      </ThemeProvider>
+    );
+    expect(defaultDashHtml).toContain('aria-pressed="false"');
+    expect(defaultDashHtml).toContain('Privacidade LGPD: Inativa');
+
+    // S10, S11, S12, S15: Preloaded escala_elderly:privacy_mode:v1=true + mixed coverage & absence state
+    const mixedRoster = getCanonicalSeed().map((item) => {
+      if (item.id === 2) {
+        return applyStatusChange(item, 'Cobertura', 'Beatriz Alves');
+      }
+      if (item.id === CARLOS_ROCHA_ID) {
+        return applyStatusChange(item, 'Faltou');
+      }
+      return item;
+    });
+    const backing = new Map<string, string>([
+      [
+        SCHEDULE_STORAGE_KEY,
+        JSON.stringify({
+          schemaVersion: 1,
+          updatedAtIso: '2026-11-11T16:00:00.000Z',
+          pendingRemoteSync: false,
+          cuidadores: mixedRoster,
+        }),
+      ],
+      [
+        PRIVACY_MODE_STORAGE_KEY,
+        JSON.stringify({
+          schemaVersion: 1,
+          enabled: true,
+          updatedAtIso: '2026-11-11T16:00:00.000Z',
+        }),
+      ],
+    ]);
+    const privacyStorage: StorageAdapter = {
+      getItem: (k) => backing.get(k) ?? null,
+      setItem: (k, v) => {
+        backing.set(k, v);
+      },
+      removeItem: (k) => {
+        backing.delete(k);
+      },
+    };
+    const lgpdStore = createLocalFirstStore({ storage: privacyStorage });
+
+    const lgpdDashHtml = renderToStaticMarkup(
+      <ThemeProvider theme={warmCareTheme}>
+        <Dashboard controllerOptions={{ store: lgpdStore, eventTarget: null }} />
+      </ThemeProvider>
+    );
+
+    expect(lgpdDashHtml).toContain('aria-pressed="true"');
+    expect(lgpdDashHtml).toContain('Privacidade LGPD: Ativa');
+    expect(lgpdDashHtml).toContain('Exportar CSV (LGPD)');
+    expect(lgpdDashHtml).toContain('R$ •••,••');
+    expect(lgpdDashHtml).toContain('Valores ocultos');
+    expect(lgpdDashHtml).toContain('Ana S.');
+    expect(lgpdDashHtml).toContain('Lucas L.');
+    expect(lgpdDashHtml).toContain('Cobertura: Beatriz A.');
+    expect(lgpdDashHtml).toContain('QUEM PODE COBRIR? — Carlos R. (Quarto 03)');
+    expect(lgpdDashHtml).toContain('Helena P.');
+    expect(lgpdDashHtml).toContain('Confirmar Cobertura — Helena P. no plantão de Carlos R.');
+    expect(lgpdDashHtml).toContain('Contato oculto (LGPD)');
+    // S12: Canonical cuidadores prop preserved allocation shadowing of Beatriz Alves (id=2) -> "1 já alocado em outra cobertura"
+    expect(lgpdDashHtml).toContain('1 já alocado em outra cobertura');
+
+    // Zero <a> tags, zero wa.me URLs, zero phone digits, zero surnames, and zero financial figures anywhere in HTML/ARIA
+    expect([...lgpdDashHtml.matchAll(/<a\b[^>]*>/gi)]).toHaveLength(0);
+    expect(lgpdDashHtml).not.toContain('wa.me');
+    for (const forbiddenPiiOrMoney of [
+      'Souza',
+      'Lima',
+      'Rocha',
+      'Costa',
+      'Alves',
+      'Prado',
+      'Mendes',
+      '90000',
+      '55119',
+      '+R$',
+      '125',
+      '190',
+      '315',
+    ]) {
+      expect(lgpdDashHtml).not.toContain(forbiddenPiiOrMoney);
+    }
+
+    // S11: Exhausted reserve pool WITHOUT quarto under privacyMode=true suppresses group wa.me <a> and masks absentCaregiver.nome
+    const absentWithoutRoom = parseCuidador({
+      id: 3,
+      nome: 'Carlos Rocha',
+      status: 'Faltou',
+      turno: 'Noturno (19h-07h)',
+    });
+    const exhaustedPool = [
+      parseCuidador({ id: 9003, nome: 'Rafael Mendes', status: 'Folga', horasDescanso: 8 }),
+    ];
+    const exhaustedLgpdHtml = renderToStaticMarkup(
+      <ThemeProvider theme={warmCareTheme}>
+        <PainelCobertura
+          absentCaregiver={absentWithoutRoom}
+          cuidadores={[absentWithoutRoom]}
+          reservePool={exhaustedPool}
+          privacyMode
+          onConfirmCoverage={() => undefined}
+        />
+      </ThemeProvider>
+    );
+    expect(exhaustedLgpdHtml).toContain('QUEM PODE COBRIR? — Carlos R.');
+    expect(exhaustedLgpdHtml).toContain('Contato oculto (LGPD)');
+    expect(exhaustedLgpdHtml).not.toMatch(/<a\b/i);
+    expect(exhaustedLgpdHtml).not.toContain('wa.me');
+    expect(exhaustedLgpdHtml).not.toContain('Rocha');
+    expect(exhaustedLgpdHtml).not.toContain('Convocar grupo no WhatsApp');
+
+    // S14: ModalFolhaEscalaA4 opens directly in Active LGPD Mural Mode when initialPrivacyMode=true
+    const modalLgpdHtml = renderToStaticMarkup(
+      <ThemeProvider theme={warmCareTheme}>
+        <ModalFolhaEscalaA4
+          open
+          cuidadores={mixedRoster}
+          initialPrivacyMode
+          disablePortal
+          onClose={() => undefined}
+        />
+      </ThemeProvider>
+    );
+    expect(modalLgpdHtml).toContain('Modo Mural Público LGPD: Ativo');
+    expect(modalLgpdHtml).toContain('MODO MURAL PÚBLICO LGPD');
+    expect(modalLgpdHtml).toContain('Restrito (LGPD)');
+    expect(modalLgpdHtml).toContain('Carlos R.');
+    expect(modalLgpdHtml).not.toContain('Rocha');
+    expect(modalLgpdHtml).not.toContain('Souza');
+    expect(modalLgpdHtml).not.toContain('90000');
+
+    // S17: Cross-tab storage synchronization helper filters strictly by PRIVACY_MODE_STORAGE_KEY or null (clear)
+    expect(syncPrivacyModeFromStorageEvent('unrelated:key', lgpdStore)).toBeNull();
+    expect(syncPrivacyModeFromStorageEvent(PRIVACY_MODE_STORAGE_KEY, lgpdStore)).toBe(true);
+    lgpdStore.writePrivacyMode(false);
+    expect(syncPrivacyModeFromStorageEvent(PRIVACY_MODE_STORAGE_KEY, lgpdStore)).toBe(false);
+    expect(syncPrivacyModeFromStorageEvent(null, lgpdStore)).toBe(false);
   });
 });

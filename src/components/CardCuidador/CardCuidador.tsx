@@ -1,11 +1,13 @@
 import type { Ref } from 'react';
 import { Box, ButtonBase } from '@mui/material';
+import type { Cuidador } from '../../hooks/useCaregivers';
+import { projectCaregiverForLgpd } from '../../services/lgpdPrivacyEngine';
 import Text from '../common/Text';
 import { styles } from './CardCuidador.styles';
-import type { Cuidador } from '../../hooks/useCaregivers';
 
 export interface CardCuidadorProps {
   readonly cuidador: Cuidador;
+  readonly privacyMode?: boolean;
   readonly onToggleStatus?: (id: number) => void;
   readonly buttonRef?: Ref<HTMLButtonElement>;
 }
@@ -22,10 +24,16 @@ function buildAccessibleCardLabel(cuidador: Cuidador, interactive: boolean): str
   return `${cuidador.nome} — ${details} — ${statusSegment}${actionHint}`;
 }
 
-export default function CardCuidador({ cuidador, onToggleStatus, buttonRef }: CardCuidadorProps) {
-  const formattedId = `ID: #${cuidador.id.toString().padStart(3, '0')}`;
-  const metaParts = [formattedId, cuidador.quarto, cuidador.turno].filter(Boolean);
-  const accessibleLabel = buildAccessibleCardLabel(cuidador, Boolean(onToggleStatus));
+export default function CardCuidador({
+  cuidador,
+  privacyMode = false,
+  onToggleStatus,
+  buttonRef,
+}: CardCuidadorProps) {
+  const view = projectCaregiverForLgpd(cuidador, privacyMode);
+  const formattedId = `ID: #${view.id.toString().padStart(3, '0')}`;
+  const metaParts = [formattedId, view.quarto, view.turno].filter(Boolean);
+  const accessibleLabel = buildAccessibleCardLabel(view, Boolean(onToggleStatus));
 
   return (
     <ButtonBase
@@ -40,20 +48,20 @@ export default function CardCuidador({ cuidador, onToggleStatus, buttonRef }: Ca
     >
       <Box component="span" sx={styles.infoGroup}>
         <Text variant="body1" component="span" sx={styles.caregiverName}>
-          {cuidador.nome}
+          {view.nome}
         </Text>
         <Text variant="caption" component="span" sx={styles.metaLine}>
           {metaParts.join(' • ')}
         </Text>
-        {cuidador.status === 'Cobertura' && cuidador.substituto ? (
+        {view.status === 'Cobertura' && view.substituto ? (
           <Text variant="caption" component="span" sx={styles.coverageNote}>
-            Cobertura: {cuidador.substituto}
+            Cobertura: {view.substituto}
           </Text>
         ) : null}
       </Box>
 
-      <Box component="span" sx={styles.badge(cuidador.status)}>
-        {cuidador.status}
+      <Box component="span" sx={styles.badge(view.status)}>
+        {view.status}
       </Box>
     </ButtonBase>
   );

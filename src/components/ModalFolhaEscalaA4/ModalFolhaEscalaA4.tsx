@@ -435,6 +435,14 @@ export default function ModalFolhaEscalaA4({
 }: ModalFolhaEscalaA4Props) {
   const [orientation, setOrientation] = useState<PageOrientation>('portrait');
   const [privacyMode, setPrivacyMode] = useState<boolean>(initialPrivacyMode);
+  const syncKey = `${open ? '1' : '0'}:${initialPrivacyMode ? '1' : '0'}`;
+  const [prevSyncKey, setPrevSyncKey] = useState<string>(syncKey);
+  if (syncKey !== prevSyncKey) {
+    setPrevSyncKey(syncKey);
+    if (open) {
+      setPrivacyMode(initialPrivacyMode);
+    }
+  }
   const [signerLabel, setSignerLabel] = useState<string>('');
   const [signaturePayload, setSignaturePayload] = useState<string | null>(null);
   const [exportStatusMessage, setExportStatusMessage] = useState<string | null>(null);

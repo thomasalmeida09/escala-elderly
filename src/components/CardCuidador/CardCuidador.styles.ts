@@ -36,7 +36,7 @@ export const styles = {
     textAlign: 'left',
     fontFamily: 'inherit',
     bgcolor: 'background.paper',
-    p: 3,
+    p: { xs: '14px 16px', sm: 3 },
     borderRadius: '8px',
     boxShadow: '0px 6px 24px rgba(45, 49, 46, 0.04)',
     border: '1px solid rgba(235, 233, 229, 0.85)',
@@ -67,11 +67,14 @@ export const styles = {
     flexDirection: 'column',
     alignItems: 'flex-start',
     minWidth: 0,
+    maxWidth: '100%',
   } as SxProps<Theme>,
 
   caregiverName: {
     fontWeight: 600,
     display: 'block',
+    maxWidth: '100%',
+    overflowWrap: 'anywhere',
   } as SxProps<Theme>,
 
   metaLine: {
@@ -80,6 +83,8 @@ export const styles = {
     mt: 0.5,
     textTransform: 'none',
     letterSpacing: '0.02em',
+    maxWidth: '100%',
+    overflowWrap: 'anywhere',
   } as SxProps<Theme>,
 
   coverageNote: {
@@ -89,6 +94,8 @@ export const styles = {
     fontWeight: 700,
     textTransform: 'none',
     letterSpacing: '0.02em',
+    maxWidth: '100%',
+    overflowWrap: 'anywhere',
   } as SxProps<Theme>,
 
   badge: (status: StatusCuidador) => {

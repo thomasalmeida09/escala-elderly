@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import { Box, Button } from '@mui/material';
 import { getCoverageSuggestions } from '../../services/coverageEngine';
+import { maskPersonNameLgpd } from '../../services/lgpdPrivacyEngine';
 import type { Cuidador } from '../../types/caregiver';
 import Text from '../common/Text';
 import { styles } from './PainelCobertura.styles';
@@ -9,6 +10,7 @@ export interface PainelCoberturaProps {
   readonly absentCaregiver: Cuidador;
   readonly cuidadores: readonly Cuidador[];
   readonly reservePool?: readonly Cuidador[];
+  readonly privacyMode?: boolean;
   readonly onConfirmCoverage: (absentCaregiverId: number, substituteName: string) => void;
 }
 
@@ -34,6 +36,7 @@ export default function PainelCobertura({
   absentCaregiver,
   cuidadores,
   reservePool,
+  privacyMode = false,
   onConfirmCoverage,
 }: PainelCoberturaProps) {
   const headingId = useId();
@@ -47,10 +50,13 @@ export default function PainelCobertura({
     suggestions.blockedByCltCount,
     suggestions.alreadyAllocatedCount
   );
+  const displayAbsentName = privacyMode
+    ? maskPersonNameLgpd(absentCaregiver.nome) || '—'
+    : absentCaregiver.nome;
   const postContext = absentCaregiver.quarto ? ` (${absentCaregiver.quarto})` : '';
   const whatsAppPostTarget = absentCaregiver.quarto
     ? `para ${absentCaregiver.quarto}`
-    : `no posto de ${absentCaregiver.nome}`;
+    : `no posto de ${displayAbsentName}`;
 
   return (
     <Box
@@ -61,7 +67,7 @@ export default function PainelCobertura({
     >
       <Box sx={styles.headerBand}>
         <Text id={headingId} variant="caption" component="h2" sx={styles.headerTitle}>
-          {`QUEM PODE COBRIR? — ${absentCaregiver.nome}${postContext}`}
+          {`QUEM PODE COBRIR? — ${displayAbsentName}${postContext}`}
         </Text>
       </Box>
 
@@ -77,15 +83,18 @@ export default function PainelCobertura({
             const originLabel =
               candidate.source === 'escala' ? 'Folga na Escala' : 'Banco de Reserva';
             const shiftText = candidate.cuidador.turno ?? 'Turno flexível';
-            const whatsAppLabel = `Acionar no WhatsApp — ${candidate.cuidador.nome} ${whatsAppPostTarget} (abre em nova aba)`;
-            const confirmLabel = `Confirmar Cobertura — ${candidate.cuidador.nome} no plantão de ${absentCaregiver.nome}`;
+            const displayCandidateName = privacyMode
+              ? maskPersonNameLgpd(candidate.cuidador.nome) || '—'
+              : candidate.cuidador.nome;
+            const whatsAppLabel = `Acionar no WhatsApp — ${displayCandidateName} ${whatsAppPostTarget} (abre em nova aba)`;
+            const confirmLabel = `Confirmar Cobertura — ${displayCandidateName} no plantão de ${displayAbsentName}`;
 
             return (
               <Box component="li" key={candidate.cuidador.id} sx={styles.candidateCard}>
                 <Box sx={styles.candidateTopRow}>
                   <Box sx={styles.candidateInfo}>
                     <Text variant="body2" component="span" sx={styles.candidateName}>
-                      {candidate.cuidador.nome}
+                      {displayCandidateName}
                     </Text>
                     <Text variant="caption" component="span" sx={styles.candidateMeta}>
                       {`${shiftText} • ${candidate.shiftMatchLabel} • ${originLabel}`}
@@ -98,20 +107,29 @@ export default function PainelCobertura({
                 </Box>
 
                 <Box sx={styles.actionsRow}>
-                  <Button
-                    component="a"
-                    variant="outlined"
-                    href={candidate.whatsAppUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={whatsAppLabel}
-                    sx={styles.whatsAppButton}
-                  >
-                    <Box component="span" aria-hidden="true" sx={styles.buttonIcon}>
-                      📲
+                  {privacyMode ? (
+                    <Box component="span" sx={styles.privacyPhoneBadge}>
+                      <Box component="span" aria-hidden="true" sx={styles.buttonIcon}>
+                        🔒
+                      </Box>
+                      Contato oculto (LGPD)
                     </Box>
-                    Acionar no WhatsApp
-                  </Button>
+                  ) : (
+                    <Button
+                      component="a"
+                      variant="outlined"
+                      href={candidate.whatsAppUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={whatsAppLabel}
+                      sx={styles.whatsAppButton}
+                    >
+                      <Box component="span" aria-hidden="true" sx={styles.buttonIcon}>
+                        📲
+                      </Box>
+                      Acionar no WhatsApp
+                    </Button>
+                  )}
 
                   <Button
                     type="button"
@@ -137,20 +155,29 @@ export default function PainelCobertura({
             plantão).
           </Text>
           <Box sx={styles.actionsRow}>
-            <Button
-              component="a"
-              variant="outlined"
-              href={suggestions.groupFallbackWhatsAppUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Convocar grupo no WhatsApp ${whatsAppPostTarget} (abre em nova aba)`}
-              sx={styles.whatsAppButton}
-            >
-              <Box component="span" aria-hidden="true" sx={styles.buttonIcon}>
-                📲
+            {privacyMode ? (
+              <Box component="span" sx={styles.privacyPhoneBadge}>
+                <Box component="span" aria-hidden="true" sx={styles.buttonIcon}>
+                  🔒
+                </Box>
+                Contato oculto (LGPD)
               </Box>
-              Convocar grupo no WhatsApp
-            </Button>
+            ) : (
+              <Button
+                component="a"
+                variant="outlined"
+                href={suggestions.groupFallbackWhatsAppUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Convocar grupo no WhatsApp ${whatsAppPostTarget} (abre em nova aba)`}
+                sx={styles.whatsAppButton}
+              >
+                <Box component="span" aria-hidden="true" sx={styles.buttonIcon}>
+                  📲
+                </Box>
+                Convocar grupo no WhatsApp
+              </Button>
+            )}
           </Box>
         </Box>
       )}
