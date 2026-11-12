@@ -640,6 +640,16 @@ describe('Multiplayer Dual-Layer Sync Engine (BroadcastChannel + W3C SSE)', () =
     expect(receivedUpdates).toHaveLength(3);
     expect(client.getDiagnostics().sessionLastEventSeq).toBe(10);
 
+    // Non-string/non-nullish lastEventId (hostile custom EventSource frame) is rejected cleanly
+    const ignoredBeforeNonStringId = client.getDiagnostics().ignoredFramesCount;
+    socket1.emitNamedEvent(
+      SSE_SCHEDULE_UPDATED_EVENT,
+      JSON.stringify(getCanonicalSeed()),
+      99 as unknown as string
+    );
+    expect(receivedUpdates).toHaveLength(3);
+    expect(client.getDiagnostics().ignoredFramesCount).toBe(ignoredBeforeNonStringId + 1);
+
     // S12: Server restarts in memory -> connection drops and new EventSource emits id: 1 (42 -> 1)
     socket1.triggerError();
     expect(socket1.closed).toBe(true);

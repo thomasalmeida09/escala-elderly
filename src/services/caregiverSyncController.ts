@@ -394,6 +394,20 @@ export function createCaregiverScheduleController(
       return;
     }
 
+    const hadPersistedSchedule = store.readInitialState().source === 'storage';
+
+    // Cold-boot multi-tab guard: if a sibling tab's clean boot GET writes the identical seed to shared
+    // localStorage while our own boot GET is still in-flight ('checking'), let our boot GET finish naturally.
+    if (
+      meta.source === 'storage' &&
+      snapshot.connectionStatus === 'checking' &&
+      !meta.pendingRemoteSync &&
+      !snapshot.pendingRemoteSync &&
+      areCaregiverListsEqual(externalList, snapshot.cuidadores)
+    ) {
+      return;
+    }
+
     // M1.2 / S11: Increment revision and cancel any clean in-flight GET reconcile so stale v1 cannot clobber v2
     revision += 1;
     if (!reconcilePushingDirtyBatch) {
@@ -406,13 +420,23 @@ export function createCaregiverScheduleController(
       deferredSseSchedule = null;
     }
 
-    persistSnapshotIfNeeded(externalList, meta.pendingRemoteSync);
+    const isStorageClearToSeed =
+      meta.source === 'storage' &&
+      !hadPersistedSchedule &&
+      !meta.pendingRemoteSync &&
+      areCaregiverListsEqual(externalList, getCanonicalSeed());
+
+    if (!isStorageClearToSeed) {
+      persistSnapshotIfNeeded(externalList, meta.pendingRemoteSync);
+    }
 
     let nextConnectionStatus = snapshot.connectionStatus;
     if (meta.source === 'sse') {
       nextConnectionStatus = 'online';
-    } else if (!meta.pendingRemoteSync && meta.source === 'broadcast-channel') {
+    } else if (!meta.pendingRemoteSync && !isStorageClearToSeed) {
       nextConnectionStatus = 'online';
+    } else if (snapshot.connectionStatus === 'checking') {
+      nextConnectionStatus = 'local-first';
     }
 
     emitIfChanged(
@@ -428,7 +452,8 @@ export function createCaregiverScheduleController(
   // M1.1: Linearizable convergence across all 4 HTTP mutation paths (including LWW race on same card)
   function flushDeferredAfterCleanMutation(
     confirmedList: readonly Cuidador[],
-    singlePatchedItem?: Cuidador
+    singlePatchedItem?: Cuidador,
+    flushOptions?: { readonly preserveLocalUndoBackup?: boolean }
   ): void {
     if (disposed || isLocallyDirty() || hasActiveHttpMutations()) {
       return;
@@ -437,21 +462,19 @@ export function createCaregiverScheduleController(
     if (deferredCrossTabPayload !== null) {
       const pendingCrossTab = deferredCrossTabPayload;
       deferredCrossTabPayload = null;
-      synchronizeUndoBackupFromCrossTab(pendingCrossTab);
+      if (pendingCrossTab.canUndoImport || !flushOptions?.preserveLocalUndoBackup) {
+        synchronizeUndoBackupFromCrossTab(pendingCrossTab);
+      }
 
-      if (pendingCrossTab.pendingRemoteSync) {
-        applyExternalSchedule(pendingCrossTab.cuidadores, {
-          source: pendingCrossTab.source,
-          pendingRemoteSync: true,
-        });
+      if (
+        pendingCrossTab.pendingRemoteSync ||
+        !areCaregiverListsEqual(pendingCrossTab.cuidadores, confirmedList)
+      ) {
         void reconcileInternal({ publishToSiblingsOnCleanFetch: true });
         return;
       }
 
-      if (!areCaregiverListsEqual(pendingCrossTab.cuidadores, confirmedList)) {
-        void reconcileInternal({ publishToSiblingsOnCleanFetch: true });
-        return;
-      }
+      emitIfChanged(createFrozenSnapshot(confirmedList, 'online', false, hasUndoBackup()));
     }
 
     if (deferredSseSchedule === null) {
@@ -486,13 +509,13 @@ export function createCaregiverScheduleController(
       return;
     }
 
-    synchronizeUndoBackupFromCrossTab(payload);
-
-    // M2.3: Preserve in-flight local HTTP mutations on this tab rather than wiping dirtyCardIds mid-flight
+    // M2.3: Preserve in-flight local HTTP mutations (and local undoBackup) on this tab mid-flight
     if (hasActiveHttpMutations()) {
       deferredCrossTabPayload = payload;
       return;
     }
+
+    synchronizeUndoBackupFromCrossTab(payload);
 
     applyExternalSchedule(payload.cuidadores, {
       source: payload.source,
@@ -559,7 +582,8 @@ export function createCaregiverScheduleController(
 
   async function syncFullRosterBatch(
     nextList: readonly Cuidador[],
-    myRevision: number
+    myRevision: number,
+    batchOptions?: { readonly preserveLocalUndoBackup?: boolean }
   ): Promise<void> {
     const batchController = new AbortController();
     mutationBatchAbort = batchController;
@@ -577,12 +601,14 @@ export function createCaregiverScheduleController(
       store.writeSnapshot(syncedList, false);
       publishLocalSchedule(syncedList, false);
       emitIfChanged(createFrozenSnapshot(syncedList, 'online', false, hasUndoBackup()));
-      flushDeferredAfterCleanMutation(syncedList);
+      flushDeferredAfterCleanMutation(syncedList, undefined, batchOptions);
     } catch (error) {
       if (disposed || isAbortedApiError(error) || batchController.signal.aborted) {
         return;
       }
       fullBatchDirty = true;
+      deferredSseSchedule = null;
+      deferredCrossTabPayload = null;
       store.writeSnapshot(snapshot.cuidadores, true);
       publishLocalSchedule(snapshot.cuidadores, true);
       emitIfChanged(
@@ -720,6 +746,7 @@ export function createCaregiverScheduleController(
       abortReconcileRequest();
     }
     deferredSseSchedule = null;
+    deferredCrossTabPayload = null;
 
     const updatedItem = computeUpdated(existing);
     const nextList = snapshot.cuidadores.map((item) => (item.id === targetId ? updatedItem : item));
@@ -832,6 +859,8 @@ export function createCaregiverScheduleController(
       // M2.2: Even if another card later incremented revision, never swallow a real failure
       dirtyCardIds.add(targetId);
       fullBatchDirty = true;
+      deferredSseSchedule = null;
+      deferredCrossTabPayload = null;
       store.writeSnapshot(snapshot.cuidadores, true);
       publishLocalSchedule(snapshot.cuidadores, true);
       emitIfChanged(
@@ -890,6 +919,7 @@ export function createCaregiverScheduleController(
     abortReconcileRequest();
     abortAllMutationRequests();
     deferredSseSchedule = null;
+    deferredCrossTabPayload = null;
 
     // Guarda anti-duplo-Ctrl+V (M3.2): preserva o backup original se a mesma planilha for colada 2x
     if (!areCaregiverListsEqual(previousList, nextList)) {
@@ -907,7 +937,7 @@ export function createCaregiverScheduleController(
     publishLocalSchedule(nextList, true);
     emitIfChanged(createFrozenSnapshot(nextList, optimisticConnection, true, hasUndoBackup()));
 
-    await syncFullRosterBatch(nextList, myRevision);
+    await syncFullRosterBatch(nextList, myRevision, { preserveLocalUndoBackup: true });
   }
 
   async function undoLastImport(): Promise<boolean> {
@@ -933,6 +963,7 @@ export function createCaregiverScheduleController(
     abortReconcileRequest();
     abortAllMutationRequests();
     deferredSseSchedule = null;
+    deferredCrossTabPayload = null;
 
     fullBatchDirty = true;
     dirtyCardIds.clear();
@@ -959,6 +990,7 @@ export function createCaregiverScheduleController(
     abortReconcileRequest();
     abortAllMutationRequests();
     deferredSseSchedule = null;
+    deferredCrossTabPayload = null;
 
     const seed = getCanonicalSeed();
     fullBatchDirty = true;
@@ -995,6 +1027,8 @@ export function createCaregiverScheduleController(
         return;
       }
       fullBatchDirty = true;
+      deferredSseSchedule = null;
+      deferredCrossTabPayload = null;
       store.writeSnapshot(snapshot.cuidadores, true);
       publishLocalSchedule(snapshot.cuidadores, true);
       emitIfChanged(createFrozenSnapshot(snapshot.cuidadores, 'local-first', true, false));

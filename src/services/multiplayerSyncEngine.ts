@@ -880,6 +880,15 @@ export function createSseStreamClient(options: SseStreamClientOptions = {}): Sse
         return;
       }
 
+      if (
+        event.lastEventId !== undefined &&
+        event.lastEventId !== null &&
+        typeof event.lastEventId !== 'string'
+      ) {
+        ignoredFramesCount += 1;
+        return;
+      }
+
       let parsedSeq: number | null = null;
       if (typeof event.lastEventId === 'string') {
         const trimmedId = event.lastEventId.trim();
