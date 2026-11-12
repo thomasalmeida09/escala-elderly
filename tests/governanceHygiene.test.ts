@@ -187,7 +187,7 @@ describe('Governance, Supply-Chain & Clean-Room Architectural Fitness Suite', ()
     }
   });
 
-  it('3. enforces strict ADR-FE-001..016 referential integrity across PR template, README, and CODEOWNERS', () => {
+  it('3. enforces strict ADR-FE-001..017 referential integrity across PR template, README, and CODEOWNERS', () => {
     const adrCatalog = readRepoFile('docs/adr/README.md');
     const prTemplate = readRepoFile('.github/pull_request_template.md');
     const readme = readRepoFile('README.md');
@@ -211,6 +211,7 @@ describe('Governance, Supply-Chain & Clean-Room Architectural Fitness Suite', ()
       'ADR-FE-014',
       'ADR-FE-015',
       'ADR-FE-016',
+      'ADR-FE-017',
     ]);
     const catalogSet = new Set(catalogHeadings);
 

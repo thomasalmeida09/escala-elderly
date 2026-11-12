@@ -5,7 +5,7 @@
 ![Vite](https://img.shields.io/badge/Vite-8.1-646CFF?logo=vite&logoColor=white)
 ![Vitest](https://img.shields.io/badge/Vitest-5.1-6E9F18?logo=vitest&logoColor=white)
 ![MUI](https://img.shields.io/badge/Material_UI-v9_Warm_Care-007A78?logo=mui&logoColor=white)
-![Status](<https://img.shields.io/badge/Status-Sprint_3_(Inteligencia_&_LGPD)-007A78>)
+![Status](<https://img.shields.io/badge/Status-Sprint_3_(Multiplayer_&_LGPD)-007A78>)
 
 Sistema web de monitoramento e gestão inteligente de escalas de cuidadores para **Instituições de Longa Permanência para Idosos (ILPIs)**, clínicas geriátricas e operações de **Home Care**.
 
@@ -18,7 +18,7 @@ Sistema web de monitoramento e gestão inteligente de escalas de cuidadores para
 | 📊 **Quadro Kanban Interativo**               | **[GitHub Projects (Front + Back)](https://github.com/users/augustoheiss/projects/1)**    | Quadro unificado com o status em tempo real de todas as tarefas da equipe     |
 | 🖼️ **Mapa Visual da Arquitetura (PR Lens)**   | **[Canvas Técnico & ADRs (`prlens.dev`)](https://prlens.dev/c/L-2rShWu_j0WpKt-jT0Cog)**   | Diagramas animados de arquitetura, _blast radius_ das Sprints e payloads JSON |
 | 👶 **Explicação Passo a Passo (ELI5 Canvas)** | **[Walkthrough Onboarding (`prlens.dev`)](https://prlens.dev/c/x2StISYcAmXvy49MhetrsQ)**  | Tour visual progressivo de como o sistema resolve uma falta no plantão        |
-| 🏛️ **Catálogo de ADRs do Frontend**           | **[`docs/adr/README.md`](./docs/adr/README.md)**                                          | Decisões arquiteturais já tomadas (`ADR-FE-001` a `ADR-FE-016`) e governança  |
+| 🏛️ **Catálogo de ADRs do Frontend**           | **[`docs/adr/README.md`](./docs/adr/README.md)**                                          | Decisões arquiteturais já tomadas (`ADR-FE-001` a `ADR-FE-017`) e governança  |
 | 🗺️ **Divisão por Sprints e Colunas**          | **[`docs/adr/QUADRO-KANBAN-SPRINTS.md`](./docs/adr/QUADRO-KANBAN-SPRINTS.md)**            | Mapa completo das 14 Issues distribuídas entre as Sprints 1, 2 e 3            |
 | ☕ **Repositório Backend (API Java)**         | **[`escala-elderly-backend`](https://github.com/thomasalmeida09/escala-elderly-backend)** | API REST em Java 17 + Spring Boot 4.1 que alimenta este painel                |
 
@@ -43,7 +43,8 @@ O **Escala Elderly** substitui o controle em papel por um **Painel do Gerente** 
 - **Exportação PDF A4 Vetorial & Estúdio de Mural (`ADR-FE-014`):** Geração 100% vetorial ISO 32000-1 (`%PDF-1.4`, `0` dependências externas, acentuação `WinAnsiEncoding` completa e selo `SHA-256` síncrono) e pré-visualização `SheetCanvas` 1:1 com paginação dinâmica `1/N` sem páginas brancas fantasmas, alternância Retrato/Paisagem, rubrica vetorial `sigv1:` (toque/mouse/teclado `WCAG 2.1.1`) e **Modo Mural Público LGPD**.
 - **KPIs Operacionais & Termômetro de Economia Financeira (`ADR-FE-015`):** Faixa executiva no topo do painel com contadores estratificados anti-Paradoxo de Simpson (`Presentes` titulares vs. `Coberturas`, excluindo `Folga` do denominador), alertas imediatos de `Faltas` e termômetro linear determinístico em centavos inteiros (`+R$ 125,00` economizados por cobertura interna planejada frente ao sobrecusto emergencial de `R$ 315,00`), pronto para mascaramento LGPD (`R$ •••,••`).
 - **Modo Privacidade LGPD Fim-a-Fim (`ADR-FE-016`):** Alternância rápida no cabeçalho (`🔓 Privacidade LGPD: Inativa` / `🔒 Privacidade LGPD: Ativa`, persistida em `escala_elderly:privacy_mode:v1` com hidratação `0ms` resistente a `F5` e `Restaurar Escala`) que projeta pseudonimização PT-BR `1:1` (`"Carlos Rocha"` → `"Carlos R."`, `"João da Conceição"` → `"João C."`) sem mutar os dados canônicos, oculta cifras financeiras (`R$ •••,••`), suprime `100%` dos links `wa.me` na triagem de cobertura (`🔒 Contato oculto (LGPD)`), exporta planilhas redigidas (`-lgpd.csv`) e abre o Estúdio A4 diretamente em Modo Mural Público LGPD.
-- **Arquitetura Resiliente (Local-First + REST API):** Hidratação síncrona em `0ms` via `localStorage` (`escala_elderly:schedule:v1`) sincronizada automaticamente aos endpoints `GET`, `PATCH`, `POST /batch` e `POST /reset` da API Spring Boot com fallback offline transparente (`MODO LOCAL-FIRST`).
+- **Sincronização Multiplayer em Tempo Real em Dupla Camada (`ADR-FE-017`):** Colaboração instantânea entre múltiplas abas no mesmo dispositivo via `BroadcastChannel` (`< 5ms`, funcionando inclusive `100%` offline para escala, desfazer importação e Modo Privacidade LGPD) combinada ao stream reativo W3C `EventSource` (`GET /api/cuidadores/stream`, evento `SCHEDULE_UPDATED` `< 150ms` entre postos/TVs na rede local), protegida por reconciliação anti-_clobbering_ Local-First, reconexão com _Full Jitter Exponential Backoff_ e idempotência referencial que preserva foco de teclado e `aria-live`.
+- **Arquitetura Resiliente (Local-First + REST API):** Hidratação síncrona em `0ms` via `localStorage` (`escala_elderly:schedule:v1`) sincronizada automaticamente aos endpoints `GET`, `PATCH`, `POST /batch`, `POST /reset` e `GET /stream` da API Spring Boot com fallback offline transparente (`MODO LOCAL-FIRST`).
 
 ---
 
@@ -57,11 +58,11 @@ escala-elderly/
 │   ├── workflows/
 │   │   └── ci.yml                               # Pipeline CI Dual-Job Node 24 (Build/Lint/Vitest/Budget & LGPD Gate)
 │   ├── CODEOWNERS                               # Roteamento automático de Code Review (@thomasalmeida09 @augustoheiss)
-│   ├── pull_request_template.md                 # Checklist de governança alinhado às ADRs (ADR-FE-001..016)
+│   ├── pull_request_template.md                 # Checklist de governança alinhado às ADRs (ADR-FE-001..017)
 │   └── ruleset-main-protection.json             # Definição auditável de proteção da branch main
 ├── docs/
 │   └── adr/
-│       ├── README.md                            # Catálogo oficial de ADRs (ADR-FE-001 a ADR-FE-016)
+│       ├── README.md                            # Catálogo oficial de ADRs (ADR-FE-001 a ADR-FE-017)
 │       └── QUADRO-KANBAN-SPRINTS.md             # Divisão das Issues por Sprints e Colunas
 ├── public/
 │   └── favicon.svg                              # Ícone vetorial da aplicação
@@ -169,10 +170,10 @@ bun run build
 
 A aplicação estará disponível em **`http://localhost:5173`**.
 
-### Integração Full-Stack (`Local-First` + API Spring Boot)
+### Integração Full-Stack (`Local-First` + Multiplayer Tempo Real + API Spring Boot)
 
-- Por padrão, o Frontend conecta-se automaticamente a **`http://localhost:8080`** (`GET /api/cuidadores`, `PATCH /api/cuidadores/{id}/status`, `POST /api/cuidadores/batch` e `POST /api/cuidadores/reset`), configurável via variável pública `VITE_API_BASE_URL` (`ADR-FE-011`).
-- Caso o servidor Spring Boot esteja desligado ou inacessível (timeout `2.500ms`), o cabeçalho exibe `● MODO LOCAL-FIRST (SALVO NO DISPOSITIVO)` e todas as mudanças permanecem salvas instantaneamente no navegador, sincronizando automaticamente quando a API voltar a ficar disponível.
+- Por padrão, o Frontend conecta-se automaticamente a **`http://localhost:8080`** (`GET /api/cuidadores`, `GET /api/cuidadores/stream` via W3C `EventSource` SSE, `PATCH /api/cuidadores/{id}/status`, `POST /api/cuidadores/batch` e `POST /api/cuidadores/reset`), sincronizando instantaneamente todas as abas locais via `BroadcastChannel` (`< 5ms`) e múltiplos dispositivos conectados na rede da clínica sem `F5` (`ADR-FE-011` e `ADR-FE-017`), configurável via variável pública `VITE_API_BASE_URL`.
+- Caso o servidor Spring Boot esteja desligado ou inacessível (timeout `2.500ms`), o cabeçalho exibe `● MODO LOCAL-FIRST (SALVO NO DISPOSITIVO)`: todas as mudanças continuam sincronizadas entre abas locais em `< 5ms` e permanecem salvas no navegador com proteção _Anti-Clobber_, reconciliando automaticamente com a API quando a conexão voltar a ficar disponível.
 
 ---
 
