@@ -51,8 +51,12 @@ export function useCaregivers(options?: CaregiverScheduleControllerOptions): Use
   );
 
   useEffect(() => {
+    const unsubscribePrivacy = controller.subscribePrivacyMode((enabled) => {
+      setPrivacyMode((prev) => (prev === enabled ? prev : enabled));
+    });
     controller.start();
     return () => {
+      unsubscribePrivacy();
       controller.dispose();
     };
   }, [controller]);
@@ -69,7 +73,7 @@ export function useCaregivers(options?: CaregiverScheduleControllerOptions): Use
     const handleStorageChange = (event: StorageEvent): void => {
       const synced = syncPrivacyModeFromStorageEvent(event.key, store);
       if (synced !== null) {
-        setPrivacyMode(synced);
+        setPrivacyMode((prev) => (prev === synced ? prev : synced));
       }
     };
 
@@ -112,13 +116,13 @@ export function useCaregivers(options?: CaregiverScheduleControllerOptions): Use
     void controller.resetSchedule();
   }, [controller]);
 
+  // M4.1 / S19: Pure state transition outside setPrivacyMode updater prevents double broadcast in React 19 <StrictMode>
   const alternarModoPrivacidade = useCallback(() => {
-    setPrivacyMode((prev) => {
-      const next = !prev;
-      store.writePrivacyMode(next);
-      return next;
-    });
-  }, [store]);
+    const next = !store.readPrivacyMode();
+    store.writePrivacyMode(next);
+    setPrivacyMode(next);
+    controller.publishPrivacyMode(next);
+  }, [controller, store]);
 
   return {
     cuidadores: snapshot.cuidadores,

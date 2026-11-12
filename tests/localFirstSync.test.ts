@@ -11,11 +11,19 @@ import {
   createCaregiverScheduleController,
 } from '../src/services/caregiverSyncController';
 import {
+  PRIVACY_MODE_STORAGE_KEY,
   SCHEDULE_STORAGE_KEY,
   type StorageAdapter,
   createLocalFirstStore,
   getCanonicalSeed,
 } from '../src/services/localFirstStore';
+import {
+  type BroadcastChannelLike,
+  type BroadcastMessageEventLike,
+  type EventSourceLike,
+  SSE_SCHEDULE_UPDATED_EVENT,
+  type SseMessageEventLike,
+} from '../src/services/multiplayerSyncEngine';
 import {
   ContractValidationError,
   type Cuidador,
@@ -605,6 +613,847 @@ describe('FE #2 — Canonical Caregiver Contract, Local-First Store & Hybrid Syn
       controller.dispose();
       expect(registered).toEqual(['online', 'offline']);
       expect(removed).toEqual(['offline', 'online']);
+    });
+  });
+
+  describe('5. FE #5 — Dual-Layer Multiplayer Controller Orchestration (BroadcastChannel + SSE + Anti-Clobber)', () => {
+    function createInMemoryBroadcastHub() {
+      const peersByChannel = new Map<string, Set<MockPeer>>();
+      let totalCreated = 0;
+
+      interface MockPeer extends BroadcastChannelLike {
+        readonly isClosed: () => boolean;
+      }
+
+      const factory = (channelName: string): BroadcastChannelLike => {
+        totalCreated += 1;
+        let closed = false;
+        const listeners = new Set<(event: BroadcastMessageEventLike) => void>();
+
+        let channelSet = peersByChannel.get(channelName);
+        if (!channelSet) {
+          channelSet = new Set<MockPeer>();
+          peersByChannel.set(channelName, channelSet);
+        }
+
+        const peer: MockPeer = {
+          onmessage: null,
+          isClosed: () => closed,
+          addEventListener(_type: 'message', listener: (event: BroadcastMessageEventLike) => void) {
+            listeners.add(listener);
+          },
+          removeEventListener(
+            _type: 'message',
+            listener: (event: BroadcastMessageEventLike) => void
+          ) {
+            listeners.delete(listener);
+          },
+          postMessage(rawMessage: unknown) {
+            if (closed) {
+              throw new DOMException('Channel is closed', 'InvalidStateError');
+            }
+            const cloned = structuredClone(rawMessage);
+            for (const other of channelSet!) {
+              if (other === peer || other.isClosed()) {
+                continue;
+              }
+              const evt: BroadcastMessageEventLike = { data: structuredClone(cloned) };
+              for (const fn of otherListenersMap.get(other) ?? []) {
+                fn(evt);
+              }
+              other.onmessage?.(evt);
+            }
+          },
+          close() {
+            if (closed) {
+              return;
+            }
+            closed = true;
+            listeners.clear();
+            peer.onmessage = null;
+            channelSet?.delete(peer);
+          },
+        };
+
+        otherListenersMap.set(peer, listeners);
+        channelSet.add(peer);
+        return peer;
+      };
+
+      const otherListenersMap = new WeakMap<
+        MockPeer,
+        Set<(event: BroadcastMessageEventLike) => void>
+      >();
+
+      return {
+        factory,
+        getActiveChannelCount(channelName = 'escala_elderly:multiplayer:v1'): number {
+          return peersByChannel.get(channelName)?.size ?? 0;
+        },
+        getTotalCreatedCount(): number {
+          return totalCreated;
+        },
+      };
+    }
+
+    interface ControllableSseHandle {
+      readonly url: string;
+      readonly isClosed: () => boolean;
+      emitOpen(): void;
+      emitScheduleUpdated(cuidadores: readonly Cuidador[], lastEventId?: string): void;
+      emitError(): void;
+    }
+
+    function createControllableEventSourceHub() {
+      const sockets: ControllableSseHandle[] = [];
+      let activeCount = 0;
+
+      const factory = (url: string): EventSourceLike => {
+        let closed = false;
+        activeCount += 1;
+        const listeners = new Map<string, Set<(event: SseMessageEventLike) => void>>();
+
+        const source: EventSourceLike = {
+          onopen: null,
+          onerror: null,
+          addEventListener(type: string, listener: (event: SseMessageEventLike) => void) {
+            let bucket = listeners.get(type);
+            if (!bucket) {
+              bucket = new Set();
+              listeners.set(type, bucket);
+            }
+            bucket.add(listener);
+          },
+          removeEventListener(type: string, listener: (event: SseMessageEventLike) => void) {
+            listeners.get(type)?.delete(listener);
+          },
+          close() {
+            if (closed) {
+              return;
+            }
+            closed = true;
+            activeCount -= 1;
+            listeners.clear();
+            source.onopen = null;
+            source.onerror = null;
+          },
+        };
+
+        const handle: ControllableSseHandle = {
+          url,
+          isClosed: () => closed,
+          emitOpen() {
+            if (!closed) {
+              source.onopen?.({});
+            }
+          },
+          emitScheduleUpdated(cuidadores: readonly Cuidador[], lastEventId = '1') {
+            if (closed) {
+              return;
+            }
+            const payload: SseMessageEventLike = {
+              data: JSON.stringify(cuidadores),
+              lastEventId,
+            };
+            for (const fn of listeners.get(SSE_SCHEDULE_UPDATED_EVENT) ?? []) {
+              fn(payload);
+            }
+          },
+          emitError() {
+            if (!closed) {
+              source.onerror?.({});
+            }
+          },
+        };
+
+        sockets.push(handle);
+        return source;
+      };
+
+      return {
+        factory,
+        sockets,
+        getActiveSocketCount: () => activeCount,
+      };
+    }
+
+    it('5.1 synchronizes 2 offline tabs (< 5ms) across toggle, absence, CLT coverage, CSV import + honest undoBackup (M2.2), and reset with 0 HTTP calls on Tab B (S01, S02, S03)', async () => {
+      const hub = createInMemoryBroadcastHub();
+      let tabAFetchCount = 0;
+      let tabBFetchCount = 0;
+
+      const offlineApiA = createCaregiverApiClient({
+        fetchImpl: async () => {
+          tabAFetchCount += 1;
+          throw new TypeError('Offline');
+        },
+      });
+      const offlineApiB = createCaregiverApiClient({
+        fetchImpl: async () => {
+          tabBFetchCount += 1;
+          throw new TypeError('Offline');
+        },
+      });
+
+      // M2.2: Both tabs run with isolated volatile stores (storage: null) to prove undoBackup travels inside SCHEDULE_SYNC!
+      const tabA = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: null }),
+        api: offlineApiA,
+        eventTarget: null,
+        broadcastChannelFactory: hub.factory,
+      });
+      const tabB = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: null }),
+        api: offlineApiB,
+        eventTarget: null,
+        broadcastChannelFactory: hub.factory,
+      });
+
+      tabA.start();
+      tabB.start();
+
+      await vi.waitFor(() => {
+        expect(tabA.getSnapshot().connectionStatus).toBe('local-first');
+        expect(tabB.getSnapshot().connectionStatus).toBe('local-first');
+      });
+
+      const baselineTabBFetches = tabBFetchCount;
+      expect(baselineTabBFetches).toBe(1); // Only initial boot reconcile
+
+      // 1. Toggle Ana Souza on Tab A -> Tab B updates synchronously via BroadcastChannel
+      await tabA.toggleCaregiverStatus(1);
+      expect(tabB.getSnapshot().cuidadores.find((c) => c.id === 1)?.status).toBe('Faltou');
+      expect(tabB.getSnapshot().pendingRemoteSync).toBe(true);
+
+      // 2. Simulate Carlos absence on Tab A -> Tab B updates
+      await tabA.simulateCarlosAbsence();
+      expect(tabB.getSnapshot().cuidadores.find((c) => c.id === CARLOS_ROCHA_ID)?.status).toBe(
+        'Faltou'
+      );
+
+      // 3. Confirm CLT coverage on Tab B -> Tab A updates!
+      await tabB.confirmCaregiverCoverage(CARLOS_ROCHA_ID, 'Beatriz Alves');
+      expect(tabA.getSnapshot().cuidadores.find((c) => c.id === CARLOS_ROCHA_ID)).toMatchObject({
+        status: 'Cobertura',
+        substituto: 'Beatriz Alves',
+      });
+
+      // 4. Import CSV batch on Tab A -> Tab B receives roster + canUndoImport: true + undoBackup in volatile store (M2.2)!
+      const importedRoster = [
+        parseCuidador({
+          id: 10,
+          nome: 'Fernanda Melo',
+          status: 'Presente',
+          turno: 'Diurno (07h-19h)',
+          quarto: 'Quarto 10',
+        }),
+      ];
+      const beforeImportOnA = tabA.getSnapshot().cuidadores;
+      await tabA.importCaregiversBatch(importedRoster);
+
+      expect(tabB.getSnapshot().cuidadores).toEqual(importedRoster);
+      expect(tabB.getSnapshot().canUndoImport).toBe(true);
+
+      // 5. Undo import directly FROM Tab B (proving M2.2 cross-tab undoBackup works even with storage: null!)
+      const undoneByTabB = await tabB.undoLastImport();
+      expect(undoneByTabB).toBe(true);
+      expect(tabB.getSnapshot().canUndoImport).toBe(false);
+      expect(tabA.getSnapshot().canUndoImport).toBe(false);
+      expect(tabA.getSnapshot().cuidadores).toEqual(beforeImportOnA);
+
+      // 6. Reset schedule on Tab A -> Tab B returns all 4 caregivers to 'Presente'
+      await tabA.resetSchedule();
+      expect(tabB.getSnapshot().cuidadores).toEqual(getCanonicalSeed());
+      expect(tabB.getSnapshot().canUndoImport).toBe(false);
+
+      // S03: Incoming BroadcastChannel messages on Tab B triggered 0 extra HTTP requests
+      // (Tab B only performed 1 boot fetch + 2 explicit mutations initiated directly on Tab B: coverage & undo)
+      expect(tabBFetchCount).toBe(baselineTabBFetches + 2);
+      expect(tabAFetchCount).toBeGreaterThanOrEqual(4);
+
+      tabA.dispose();
+      tabB.dispose();
+      expect(hub.getActiveChannelCount()).toBe(0);
+    });
+
+    it('5.2 enforces conditional persistence (M2.1 / S05: 0 redundant setItem writes across 3 shared-storage tabs) and strict referential idempotence (M1.3 / S06)', async () => {
+      const hub = createInMemoryBroadcastHub();
+      const sseHub = createControllableEventSourceHub();
+
+      let scheduleSetItemCount = 0;
+      const backing = new Map<string, string>();
+      const sharedAdapter: StorageAdapter = {
+        getItem: (key) => backing.get(key) ?? null,
+        setItem: (key, value) => {
+          if (key === SCHEDULE_STORAGE_KEY) {
+            scheduleSetItemCount += 1;
+          }
+          backing.set(key, value);
+        },
+        removeItem: (key) => {
+          backing.delete(key);
+        },
+      };
+
+      let serverRoster = getCanonicalSeed();
+      const onlineApi = createCaregiverApiClient({
+        fetchImpl: async (_input, init) => {
+          if (init?.method === 'PATCH') {
+            const payload = JSON.parse(String(init.body)) as { status: Cuidador['status'] };
+            serverRoster = serverRoster.map((c) =>
+              c.id === CARLOS_ROCHA_ID ? applyStatusChange(c, payload.status) : c
+            );
+            return jsonResponse(serverRoster.find((c) => c.id === CARLOS_ROCHA_ID));
+          }
+          return jsonResponse(serverRoster);
+        },
+      });
+
+      const tabA = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: sharedAdapter }),
+        api: onlineApi,
+        eventTarget: null,
+        broadcastChannelFactory: hub.factory,
+        eventSourceFactory: sseHub.factory,
+      });
+      const tabB = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: sharedAdapter }),
+        api: onlineApi,
+        eventTarget: null,
+        broadcastChannelFactory: hub.factory,
+        eventSourceFactory: sseHub.factory,
+      });
+      const tabC = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: sharedAdapter }),
+        api: onlineApi,
+        eventTarget: null,
+        broadcastChannelFactory: hub.factory,
+        eventSourceFactory: sseHub.factory,
+      });
+
+      tabA.start();
+      tabB.start();
+      tabC.start();
+
+      await vi.waitFor(() => {
+        expect(tabA.getSnapshot().connectionStatus).toBe('online');
+        expect(tabB.getSnapshot().connectionStatus).toBe('online');
+        expect(tabC.getSnapshot().connectionStatus).toBe('online');
+      });
+
+      // Reset write counter after initial cold-storage seed hydration
+      scheduleSetItemCount = 0;
+
+      // Mutate Carlos on Tab A:
+      // 1 optimistic write (pendingRemoteSync: true) + 1 confirmed write (pendingRemoteSync: false) on Tab A = 2 writes total.
+      // Tab B and Tab C MUST perform 0 redundant setItem writes because sharedAdapter already holds the exact state!
+      await tabA.simulateCarlosAbsence();
+      expect(tabB.getSnapshot().cuidadores.find((c) => c.id === CARLOS_ROCHA_ID)?.status).toBe(
+        'Faltou'
+      );
+      expect(tabC.getSnapshot().cuidadores.find((c) => c.id === CARLOS_ROCHA_ID)?.status).toBe(
+        'Faltou'
+      );
+      expect(scheduleSetItemCount).toBe(2);
+
+      // S06 (M1.3): Emitting an identical SSE snapshot preserves Object.is(prev, next) and fires 0 listener notifications!
+      const prevSnapB = tabB.getSnapshot();
+      let tabBNotifications = 0;
+      const unsubB = tabB.subscribe(() => {
+        tabBNotifications += 1;
+      });
+
+      sseHub.sockets[1]!.emitOpen();
+      sseHub.sockets[1]!.emitScheduleUpdated(serverRoster, '10');
+
+      expect(tabBNotifications).toBe(0);
+      expect(Object.is(prevSnapB, tabB.getSnapshot())).toBe(true);
+      expect(scheduleSetItemCount).toBe(2);
+
+      unsubB();
+      tabA.dispose();
+      tabB.dispose();
+      tabC.dispose();
+    });
+
+    it('5.3 protects offline edits against stale SSE initial snapshots on reconnect and auto-pushes via POST /batch (S08)', async () => {
+      const hub = createInMemoryBroadcastHub();
+      const sseHub = createControllableEventSourceHub();
+
+      let serverOnline = false;
+      let serverRoster = getCanonicalSeed();
+      const httpCalls: string[] = [];
+
+      const api = createCaregiverApiClient({
+        fetchImpl: async (input, init) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          const method = init?.method ?? 'GET';
+          httpCalls.push(`${method} ${url}`);
+          if (!serverOnline) {
+            throw new TypeError('Offline');
+          }
+          if (method === 'POST' && url.endsWith('/api/cuidadores/batch')) {
+            serverRoster = parseCuidadorList(JSON.parse(String(init?.body)));
+            return jsonResponse(serverRoster);
+          }
+          return jsonResponse(serverRoster);
+        },
+      });
+
+      const tabA = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: null }),
+        api,
+        eventTarget: null,
+        broadcastChannelFactory: hub.factory,
+        eventSourceFactory: sseHub.factory,
+      });
+      const tabB = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: null }),
+        api,
+        eventTarget: null,
+        broadcastChannelFactory: hub.factory,
+        eventSourceFactory: sseHub.factory,
+      });
+
+      tabA.start();
+      tabB.start();
+
+      await vi.waitFor(() => {
+        expect(tabA.getSnapshot().connectionStatus).toBe('local-first');
+        expect(tabB.getSnapshot().connectionStatus).toBe('local-first');
+      });
+
+      // Operator marks Carlos absent while offline -> both tabs hold pendingRemoteSync: true
+      await tabA.simulateCarlosAbsence();
+      expect(tabA.getSnapshot().pendingRemoteSync).toBe(true);
+      expect(tabB.getSnapshot().pendingRemoteSync).toBe(true);
+      expect(tabB.getSnapshot().cuidadores.find((c) => c.id === CARLOS_ROCHA_ID)?.status).toBe(
+        'Faltou'
+      );
+
+      // Backend comes back online and SSE delivers stale server seed (Carlos = Presente) BEFORE POST /batch finishes!
+      serverOnline = true;
+      sseHub.sockets[0]!.emitScheduleUpdated(getCanonicalSeed(), '1');
+      // Anti-Clobber invariant: stale SSE snapshot MUST NOT overwrite Carlos = Faltou!
+      expect(tabA.getSnapshot().cuidadores.find((c) => c.id === CARLOS_ROCHA_ID)?.status).toBe(
+        'Faltou'
+      );
+
+      // SSE onopen triggers reconcile() -> pushes dirty batch via POST /api/cuidadores/batch!
+      sseHub.sockets[0]!.emitOpen();
+
+      await vi.waitFor(() => {
+        expect(tabA.getSnapshot().connectionStatus).toBe('online');
+        expect(tabA.getSnapshot().pendingRemoteSync).toBe(false);
+        expect(tabB.getSnapshot().connectionStatus).toBe('online');
+        expect(tabB.getSnapshot().pendingRemoteSync).toBe(false);
+      });
+
+      expect(serverRoster.find((c) => c.id === CARLOS_ROCHA_ID)?.status).toBe('Faltou');
+      expect(tabA.getSnapshot().cuidadores.find((c) => c.id === CARLOS_ROCHA_ID)?.status).toBe(
+        'Faltou'
+      );
+      expect(tabB.getSnapshot().cuidadores.find((c) => c.id === CARLOS_ROCHA_ID)?.status).toBe(
+        'Faltou'
+      );
+      expect(httpCalls.some((c) => c.startsWith('POST ') && c.endsWith('/batch'))).toBe(true);
+
+      tabA.dispose();
+      tabB.dispose();
+    });
+
+    it('5.4 converges sub-ms distinct-card races in 0ms with 0 extra GETs (S09) and resolves same-card LWW races via GET reconcile (S10 / M1.1)', async () => {
+      const hub = createInMemoryBroadcastHub();
+      const sseHub = createControllableEventSourceHub();
+
+      let serverRoster = getCanonicalSeed();
+      let getCount = 0;
+      let pendingPatchResolver: ((item: Cuidador) => void) | null = null;
+
+      const api: ReturnType<typeof createCaregiverApiClient> = {
+        baseUrl: DEFAULT_API_BASE_URL,
+        fetchCaregivers: async () => {
+          getCount += 1;
+          return serverRoster;
+        },
+        syncCaregiversBatch: async (items) => [...items],
+        resetCaregiversSchedule: async () => getCanonicalSeed(),
+        patchCaregiverStatus: () =>
+          new Promise<Cuidador>((resolve) => {
+            pendingPatchResolver = resolve;
+          }),
+      };
+
+      const tabA = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: null }),
+        api,
+        eventTarget: null,
+        broadcastChannelFactory: hub.factory,
+        eventSourceFactory: sseHub.factory,
+      });
+      const tabB = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: null }),
+        api,
+        eventTarget: null,
+        broadcastChannelFactory: hub.factory,
+        eventSourceFactory: sseHub.factory,
+      });
+
+      tabA.start();
+      tabB.start();
+      sseHub.sockets[0]!.emitOpen();
+      sseHub.sockets[1]!.emitOpen();
+
+      await vi.waitFor(() => {
+        expect(tabA.getSnapshot().connectionStatus).toBe('online');
+        expect(tabB.getSnapshot().connectionStatus).toBe('online');
+      });
+
+      const baselineGets = getCount;
+
+      // === SCENARIO S09: Distinct-card race (Tab A patches Carlos -> Faltou; Device C patches Ana -> Folga) ===
+      const patchPromiseS09 = tabA.simulateCarlosAbsence();
+      const s09ServerState = getCanonicalSeed().map((c) => {
+        if (c.id === 1) return applyStatusChange(c, 'Folga');
+        if (c.id === CARLOS_ROCHA_ID) return applyStatusChange(c, 'Faltou');
+        return c;
+      });
+      serverRoster = s09ServerState;
+
+      // SSE v3 arrives on Tab A WHILE Tab A's PATCH /3 response is still in flight!
+      sseHub.sockets[0]!.emitScheduleUpdated(s09ServerState, '2');
+
+      // Resolve Tab A's PATCH /3 HTTP response (singlePatchedItem = Carlos Faltou)
+      pendingPatchResolver!(s09ServerState.find((c) => c.id === CARLOS_ROCHA_ID)!);
+      await patchPromiseS09;
+
+      // Both Tab A AND sibling Tab B converge to [Ana=Folga, Carlos=Faltou] in 0ms with ZERO extra GET calls!
+      expect(getCount).toBe(baselineGets);
+      expect(tabA.getSnapshot().cuidadores.find((c) => c.id === 1)?.status).toBe('Folga');
+      expect(tabA.getSnapshot().cuidadores.find((c) => c.id === CARLOS_ROCHA_ID)?.status).toBe(
+        'Faltou'
+      );
+      expect(tabB.getSnapshot().cuidadores.find((c) => c.id === 1)?.status).toBe('Folga');
+      expect(tabB.getSnapshot().cuidadores.find((c) => c.id === CARLOS_ROCHA_ID)?.status).toBe(
+        'Faltou'
+      );
+
+      // === SCENARIO S10 (M1.1): Same-card LWW race (Tab A patches Carlos -> Folga [v2]; Device C wins LWW with Carlos -> Cobertura [v3]) ===
+      const patchPromiseS10 = tabA.toggleCaregiverStatus(CARLOS_ROCHA_ID); // Carlos Faltou -> Folga (v2)
+      const s10ServerWinner = s09ServerState.map((c) =>
+        c.id === CARLOS_ROCHA_ID ? applyStatusChange(c, 'Cobertura', 'Beatriz Alves') : c
+      );
+      serverRoster = s10ServerWinner;
+
+      // SSE v3 (Carlos = Cobertura) arrives BEFORE Tab A's stale HTTP v2 response (Carlos = Folga)!
+      sseHub.sockets[0]!.emitScheduleUpdated(s10ServerWinner, '3');
+
+      // Now Tab A's HTTP v2 response resolves with Carlos = Folga (superseded on server by v3!)
+      const staleV2Carlos = applyStatusChange(
+        getCanonicalSeed().find((c) => c.id === CARLOS_ROCHA_ID)!,
+        'Folga'
+      );
+      pendingPatchResolver!(staleV2Carlos);
+      await patchPromiseS10;
+
+      // M1.1: Controller detects matchingInSse (Cobertura) !== singlePatchedItem (Folga), triggers GET reconcile,
+      // and converges BOTH Tab A and sibling Tab B to Cobertura (Beatriz Alves)!
+      await vi.waitFor(() => {
+        expect(tabA.getSnapshot().cuidadores.find((c) => c.id === CARLOS_ROCHA_ID)).toMatchObject({
+          status: 'Cobertura',
+          substituto: 'Beatriz Alves',
+        });
+        expect(tabB.getSnapshot().cuidadores.find((c) => c.id === CARLOS_ROCHA_ID)).toMatchObject({
+          status: 'Cobertura',
+          substituto: 'Beatriz Alves',
+        });
+      });
+      expect(getCount).toBe(baselineGets + 1);
+
+      tabA.dispose();
+      tabB.dispose();
+    });
+
+    it('5.5 aborts slow boot GET on fresher SSE/BroadcastChannel arrival (M1.2 / S11) and guards in-flight sibling mutations (M2.3)', async () => {
+      const hub = createInMemoryBroadcastHub();
+      const sseHub = createControllableEventSourceHub();
+
+      let capturedBootSignal: AbortSignal | undefined;
+      let resolveSlowBootGet: (items: Cuidador[]) => void = () => undefined;
+      let serverRoster = getCanonicalSeed();
+
+      const api: ReturnType<typeof createCaregiverApiClient> = {
+        baseUrl: DEFAULT_API_BASE_URL,
+        fetchCaregivers: (signal) => {
+          if (!capturedBootSignal) {
+            capturedBootSignal = signal;
+            return new Promise<Cuidador[]>((resolve, reject) => {
+              signal?.addEventListener('abort', () => {
+                reject(new CaregiverApiError('Aborted stale GET', 'aborted'));
+              });
+              resolveSlowBootGet = resolve;
+            });
+          }
+          return Promise.resolve(serverRoster);
+        },
+        syncCaregiversBatch: async (items) => {
+          serverRoster = [...items];
+          return serverRoster;
+        },
+        resetCaregiversSchedule: async () => getCanonicalSeed(),
+        patchCaregiverStatus: async (id, status) => {
+          serverRoster = serverRoster.map((c) => (c.id === id ? applyStatusChange(c, status) : c));
+          return serverRoster.find((c) => c.id === id)!;
+        },
+      };
+
+      const tabA = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: null }),
+        api,
+        eventTarget: null,
+        broadcastChannelFactory: hub.factory,
+        eventSourceFactory: sseHub.factory,
+      });
+
+      tabA.start();
+      expect(capturedBootSignal).toBeDefined();
+      expect(capturedBootSignal!.aborted).toBe(false);
+
+      // Fresher SSE v2 arrives while slow boot GET v1 is still hanging!
+      const v2Roster = getCanonicalSeed().map((c) =>
+        c.id === CARLOS_ROCHA_ID ? applyStatusChange(c, 'Faltou') : c
+      );
+      serverRoster = v2Roster;
+      sseHub.sockets[0]!.emitOpen();
+      sseHub.sockets[0]!.emitScheduleUpdated(v2Roster, '5');
+
+      // M1.2 / S11: Slow boot GET AbortSignal was deterministically aborted and v2 is active!
+      expect(capturedBootSignal!.aborted).toBe(true);
+      expect(tabA.getSnapshot().connectionStatus).toBe('online');
+      expect(tabA.getSnapshot().cuidadores.find((c) => c.id === CARLOS_ROCHA_ID)?.status).toBe(
+        'Faltou'
+      );
+
+      // Even if resolveSlowBootGet were invoked late, v1 CANNOT overwrite v2
+      resolveSlowBootGet(getCanonicalSeed());
+      await Promise.resolve();
+      expect(tabA.getSnapshot().cuidadores.find((c) => c.id === CARLOS_ROCHA_ID)?.status).toBe(
+        'Faltou'
+      );
+
+      // M2.3: Sibling SCHEDULE_SYNC arriving while Tab B has an in-flight PATCH does NOT wipe Tab B's dirty state
+      let resolveTabBPatch: ((item: Cuidador) => void) | null = null;
+      let tabBFetchCount = 0;
+      const tabBApi: ReturnType<typeof createCaregiverApiClient> = {
+        baseUrl: DEFAULT_API_BASE_URL,
+        fetchCaregivers: async () => {
+          tabBFetchCount += 1;
+          return serverRoster;
+        },
+        syncCaregiversBatch: async (items) => {
+          serverRoster = [...items];
+          return serverRoster;
+        },
+        resetCaregiversSchedule: async () => getCanonicalSeed(),
+        patchCaregiverStatus: (id, status) =>
+          new Promise<Cuidador>((resolve) => {
+            resolveTabBPatch = (item) => {
+              serverRoster = serverRoster.map((c) =>
+                c.id === id ? applyStatusChange(c, status) : c
+              );
+              resolve(item);
+            };
+          }),
+      };
+
+      const tabB = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: null }),
+        api: tabBApi,
+        eventTarget: null,
+        broadcastChannelFactory: hub.factory,
+      });
+      tabB.start();
+      await vi.waitFor(() => {
+        expect(tabB.getSnapshot().connectionStatus).toBe('online');
+      });
+
+      // Tab B starts an in-flight PATCH on Mariana (id=4 -> Faltou)
+      const tabBMutation = tabB.toggleCaregiverStatus(4);
+      // Simultaneously Tab A toggles Ana (id=1 -> Faltou), broadcasting SCHEDULE_SYNC to Tab B mid-flight!
+      await tabA.toggleCaregiverStatus(1);
+
+      // Tab B MUST still show Mariana = Faltou while its PATCH /4 is in-flight!
+      expect(tabB.getSnapshot().cuidadores.find((c) => c.id === 4)?.status).toBe('Faltou');
+
+      const marianaPatched = applyStatusChange(
+        getCanonicalSeed().find((c) => c.id === 4)!,
+        'Faltou'
+      );
+      resolveTabBPatch!(marianaPatched);
+      await tabBMutation;
+
+      // After Tab B's PATCH finishes, deferredCrossTabPayload triggers reconcile() and both Tab A & Tab B converge to Ana=Faltou + Mariana=Faltou!
+      await vi.waitFor(() => {
+        expect(tabB.getSnapshot().cuidadores.find((c) => c.id === 1)?.status).toBe('Faltou');
+        expect(tabB.getSnapshot().cuidadores.find((c) => c.id === 4)?.status).toBe('Faltou');
+        expect(tabA.getSnapshot().cuidadores.find((c) => c.id === 4)?.status).toBe('Faltou');
+      });
+      expect(tabBFetchCount).toBeGreaterThanOrEqual(2);
+
+      tabA.dispose();
+      tabB.dispose();
+    });
+
+    it('5.6 enforces M3.1 / S16 connection badge stability (proxy-blocked SSE vs real drop after onopen) and online reconnectNow (S17)', async () => {
+      vi.useFakeTimers();
+      const sseHub = createControllableEventSourceHub();
+      const innerTarget = new EventTarget();
+      const observedStatuses: string[] = [];
+
+      const api = createCaregiverApiClient({
+        fetchImpl: async () => jsonResponse(getCanonicalSeed()),
+      });
+
+      const controller = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: null }),
+        api,
+        eventTarget: innerTarget,
+        eventSourceFactory: sseHub.factory,
+        sseRandom: () => 0.5,
+      });
+
+      controller.subscribe(() => {
+        observedStatuses.push(controller.getSnapshot().connectionStatus);
+      });
+
+      controller.start();
+      await vi.waitFor(() => {
+        expect(controller.getSnapshot().connectionStatus).toBe('online');
+      });
+      expect(sseHub.sockets).toHaveLength(1);
+
+      // Case 1 (M3.1): Corporate proxy blocks text/event-stream BEFORE onopen (hadOpenStream = false)
+      // REST GET succeeded -> badge MUST remain 'online' and NEVER flicker to 'local-first' or 'checking'!
+      observedStatuses.length = 0;
+      sseHub.sockets[0]!.emitError();
+      expect(controller.getSnapshot().connectionStatus).toBe('online');
+      expect(observedStatuses).toEqual([]);
+
+      // Advance timer to let background SSE retry connect (socket #2)
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(sseHub.sockets).toHaveLength(2);
+      expect(observedStatuses).toEqual([]);
+
+      // Case 2 (S16): Socket #2 opens cleanly (hadOpenStream = true), then backend crashes (emitError)!
+      sseHub.sockets[1]!.emitOpen();
+      sseHub.sockets[1]!.emitError();
+      expect(controller.getSnapshot().connectionStatus).toBe('local-first');
+      expect(observedStatuses).toEqual(['local-first']);
+
+      // Subsequent background retry failures MUST NOT spam 'checking' into aria-live!
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(sseHub.sockets).toHaveLength(3);
+      sseHub.sockets[2]!.emitError();
+      expect(observedStatuses).toEqual(['local-first']);
+
+      // Case 3 (S17): Browser 'online' event triggers immediate sseClient.reconnectNow() (socket #4) + reconcile()!
+      innerTarget.dispatchEvent(new Event('online'));
+      expect(sseHub.sockets).toHaveLength(4);
+      sseHub.sockets[3]!.emitOpen();
+      await vi.waitFor(() => {
+        expect(controller.getSnapshot().connectionStatus).toBe('online');
+      });
+
+      controller.dispose();
+      expect(sseHub.getActiveSocketCount()).toBe(0);
+    });
+
+    it('5.7 survives React 19 <StrictMode> double-effect lifecycle with 0 socket/channel leaks and syncs LGPD privacyMode without touching canonical schedule (S18, S19, M4.2)', async () => {
+      const hub = createInMemoryBroadcastHub();
+      const sseHub = createControllableEventSourceHub();
+
+      const registered: string[] = [];
+      const removed: string[] = [];
+      const trackedTarget: ConnectivityEventTarget = {
+        addEventListener(type) {
+          registered.push(type);
+        },
+        removeEventListener(type) {
+          removed.push(type);
+        },
+      };
+
+      const memA = createMemoryStorage();
+      const memB = createMemoryStorage();
+      const storeA = createLocalFirstStore({ storage: memA.adapter });
+      const storeB = createLocalFirstStore({ storage: memB.adapter });
+
+      // Pre-seed unredacted schedule in both stores
+      storeA.writeSnapshot(getCanonicalSeed(), false);
+      storeB.writeSnapshot(getCanonicalSeed(), false);
+      const rawScheduleBefore = memB.data.get(SCHEDULE_STORAGE_KEY);
+
+      const api = createCaregiverApiClient({
+        fetchImpl: async () => jsonResponse(getCanonicalSeed()),
+      });
+
+      const tabA = createCaregiverScheduleController({
+        store: storeA,
+        api,
+        eventTarget: trackedTarget,
+        broadcastChannelFactory: hub.factory,
+        eventSourceFactory: sseHub.factory,
+      });
+      const tabB = createCaregiverScheduleController({
+        store: storeB,
+        api,
+        eventTarget: null,
+        broadcastChannelFactory: hub.factory,
+        eventSourceFactory: sseHub.factory,
+      });
+
+      // Subscribe privacy listener BEFORE StrictMode cycle (as useCaregivers useEffect does on remount)
+      const receivedPrivacyOnB: boolean[] = [];
+      const unsubPrivacyB = tabB.subscribePrivacyMode((enabled) => {
+        receivedPrivacyOnB.push(enabled);
+      });
+
+      // Simulate React 19 <StrictMode> mount -> cleanup -> remount on both tabs!
+      tabA.start();
+      tabA.dispose();
+      tabA.start();
+
+      tabB.start();
+      tabB.dispose();
+      tabB.start();
+
+      // Exactly 2 active BroadcastChannels (1 per tab) and 2 active EventSources (1 per tab) — ZERO orphans!
+      expect(hub.getActiveChannelCount()).toBe(2);
+      expect(sseHub.getActiveSocketCount()).toBe(2);
+
+      // S19 & M4.2: Toggling privacyMode on Tab A propagates via PRIVACY_SYNC to Tab B (< 5ms)
+      tabA.publishPrivacyMode(true);
+      expect(receivedPrivacyOnB).toEqual([true]);
+      expect(storeB.readPrivacyMode()).toBe(true);
+      expect(memB.data.has(PRIVACY_MODE_STORAGE_KEY)).toBe(true);
+
+      // Canonical schedule storage in Tab B remains 100% unredacted (Carlos Rocha + full phone preserved!)
+      expect(memB.data.get(SCHEDULE_STORAGE_KEY)).toBe(rawScheduleBefore);
+      expect(memB.data.get(SCHEDULE_STORAGE_KEY)).toContain('Carlos Rocha');
+      expect(memB.data.get(SCHEDULE_STORAGE_KEY)).toContain('+55 11 90000-0103');
+
+      tabA.publishPrivacyMode(false);
+      expect(receivedPrivacyOnB).toEqual([true, false]);
+      expect(storeB.readPrivacyMode()).toBe(false);
+
+      unsubPrivacyB();
+      tabA.dispose();
+      tabB.dispose();
+
+      expect(hub.getActiveChannelCount()).toBe(0);
+      expect(sseHub.getActiveSocketCount()).toBe(0);
+      expect(registered).toEqual(['online', 'offline', 'online', 'offline']);
+      expect(removed).toEqual(['offline', 'online', 'offline', 'online']);
     });
   });
 });
