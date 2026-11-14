@@ -1680,5 +1680,308 @@ describe('FE #2 — Canonical Caregiver Contract, Local-First Store & Hybrid Syn
       offlineTab3.dispose();
       offlineTab4.dispose();
     });
+
+    // ---------------------------------------------------------------------------------------------
+    // Hotfix FE #5 (plano 15): o clique que promove PATCH -> POST /batch não pode apagar uma edição
+    // já confirmada pelo servidor para OUTRO dispositivo (frame SSE retido em deferredSseSchedule).
+    // Cenário comum (5.9, 5.10, 5.12): A online, SSE aberto, PATCH do card 1 em voo.
+    // ---------------------------------------------------------------------------------------------
+    function createRetainedFrameScenario(options?: {
+      readonly failFirstBatchWith?: CaregiverApiError;
+      readonly holdBatch?: boolean;
+    }) {
+      const sseHub = createControllableEventSourceHub();
+      let serverRoster = getCanonicalSeed();
+      let getCount = 0;
+      const batchBodies: Cuidador[][] = [];
+      let releaseBatch: () => void = () => undefined;
+      const batchGate = new Promise<void>((resolve) => {
+        releaseBatch = resolve;
+      });
+      let failuresLeft = options?.failFirstBatchWith ? 1 : 0;
+
+      const api: ReturnType<typeof createCaregiverApiClient> = {
+        baseUrl: DEFAULT_API_BASE_URL,
+        fetchCaregivers: async () => {
+          getCount += 1;
+          return serverRoster;
+        },
+        syncCaregiversBatch: async (items) => {
+          batchBodies.push([...items]);
+          if (options?.holdBatch) {
+            await batchGate;
+          }
+          if (failuresLeft > 0 && options?.failFirstBatchWith) {
+            failuresLeft -= 1;
+            throw options.failFirstBatchWith;
+          }
+          serverRoster = [...items];
+          return [...items];
+        },
+        resetCaregiversSchedule: async () => getCanonicalSeed(),
+        // O PATCH nunca resolve sozinho: só termina quando o controlador o aborta (promoção a batch).
+        patchCaregiverStatus: (_id, _status, _substituto, signal) =>
+          new Promise<Cuidador>((_resolve, reject) => {
+            signal?.addEventListener('abort', () =>
+              reject(new CaregiverApiError('Aborted', 'aborted'))
+            );
+          }),
+      };
+
+      const tabA = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: null }),
+        api,
+        eventTarget: null,
+        broadcastChannelFactory: null,
+        eventSourceFactory: sseHub.factory,
+      });
+
+      return {
+        tabA,
+        sseHub,
+        batchBodies,
+        releaseBatch: () => releaseBatch(),
+        getCount: () => getCount,
+        getServerRoster: () => serverRoster,
+        setServerRoster: (next: Cuidador[]) => {
+          serverRoster = next;
+        },
+        async startOnline() {
+          tabA.start();
+          sseHub.sockets[0]!.emitOpen();
+          await vi.waitFor(() => {
+            expect(tabA.getSnapshot().connectionStatus).toBe('online');
+          });
+        },
+      };
+    }
+
+    const statusOf = (list: readonly Cuidador[], id: number) =>
+      list.find((c) => c.id === id)?.status;
+
+    it.fails(
+      '5.9 merges the retained SSE frame into the promoted POST /batch so a confirmed edit from another device survives (J1)',
+      async () => {
+        const scenario = createRetainedFrameScenario({ holdBatch: true });
+        const { tabA, sseHub, batchBodies } = scenario;
+        try {
+          await scenario.startOnline();
+          const baselineGets = scenario.getCount();
+
+          // 1) A clica o card 1 (Ana): PATCH /1 fica em voo, dirtyCardIds = {1}.
+          const p1 = tabA.toggleCaregiverStatus(1);
+
+          // 2) Outro dispositivo marca Lucas (id 2) Faltou; o frame SSE chega a A e fica retido.
+          const rosterFromC = getCanonicalSeed().map((c) =>
+            c.id === 2 ? applyStatusChange(c, 'Faltou') : c
+          );
+          scenario.setServerRoster(rosterFromC);
+          sseHub.sockets[0]!.emitScheduleUpdated(rosterFromC, '2');
+
+          // 3) Antes do PATCH voltar, A clica o card 3 (Carlos): promove a POST /batch (POST retido).
+          const p3 = tabA.toggleCaregiverStatus(3);
+
+          // Estado otimista ANTES do POST terminar: a edição de C já está no estado local (variante M2).
+          const optimistic = tabA.getSnapshot().cuidadores;
+          expect(statusOf(optimistic, 1)).toBe('Faltou');
+          expect(statusOf(optimistic, 2)).toBe('Faltou');
+          expect(statusOf(optimistic, 3)).toBe('Faltou');
+          expect(statusOf(optimistic, 4)).toBe('Presente');
+          expect(batchBodies).toHaveLength(1);
+          expect(statusOf(batchBodies[0]!, 2)).toBe('Faltou');
+
+          scenario.releaseBatch();
+          await Promise.all([p1, p3]);
+
+          // O servidor simulado termina com a edição de C preservada; nenhuma releitura extra (opção A).
+          expect(batchBodies).toHaveLength(1);
+          expect(statusOf(scenario.getServerRoster(), 2)).toBe('Faltou');
+          expect(scenario.getCount()).toBe(baselineGets);
+          const finalSnapshot = tabA.getSnapshot();
+          expect(statusOf(finalSnapshot.cuidadores, 1)).toBe('Faltou');
+          expect(statusOf(finalSnapshot.cuidadores, 2)).toBe('Faltou');
+          expect(statusOf(finalSnapshot.cuidadores, 3)).toBe('Faltou');
+          expect(statusOf(finalSnapshot.cuidadores, 4)).toBe('Presente');
+          expect(finalSnapshot.pendingRemoteSync).toBe(false);
+          expect(finalSnapshot.connectionStatus).toBe('online');
+        } finally {
+          tabA.dispose();
+        }
+      }
+    );
+
+    it.fails(
+      '5.10 keeps the merged edit of another device when the promoted POST /batch fails, so the retry does not erase it',
+      async () => {
+        const scenario = createRetainedFrameScenario({
+          failFirstBatchWith: new CaregiverApiError('timeout', 'timeout'),
+        });
+        const { tabA, sseHub, batchBodies } = scenario;
+        try {
+          await scenario.startOnline();
+
+          const p1 = tabA.toggleCaregiverStatus(1);
+          const rosterFromC = getCanonicalSeed().map((c) =>
+            c.id === 2 ? applyStatusChange(c, 'Faltou') : c
+          );
+          scenario.setServerRoster(rosterFromC);
+          sseHub.sockets[0]!.emitScheduleUpdated(rosterFromC, '2');
+
+          await Promise.all([p1, tabA.toggleCaregiverStatus(3)]);
+
+          // O 1º POST falhou: A fica local-first e sujo, MAS a edição de C já está no estado local.
+          expect(batchBodies).toHaveLength(1);
+          expect(tabA.getSnapshot().connectionStatus).toBe('local-first');
+          expect(tabA.getSnapshot().pendingRemoteSync).toBe(true);
+          expect(statusOf(tabA.getSnapshot().cuidadores, 2)).toBe('Faltou');
+
+          // O retry (reconcile sujo reenvia o roster LOCAL) não pode apagar a edição de C de novo.
+          await tabA.reconcile();
+          expect(batchBodies).toHaveLength(2);
+          expect(statusOf(batchBodies[1]!, 2)).toBe('Faltou');
+          expect(statusOf(scenario.getServerRoster(), 2)).toBe('Faltou');
+        } finally {
+          tabA.dispose();
+        }
+      }
+    );
+
+    it("5.11 keeps the operator's offline edits when a retained SSE frame exists and a further click promotes to POST /batch (V2 / S26)", async () => {
+      const sseHub = createControllableEventSourceHub();
+      let serverOnline = false;
+      let serverRoster = getCanonicalSeed();
+      const batchBodies: Cuidador[][] = [];
+
+      const api = createCaregiverApiClient({
+        fetchImpl: async (input, init) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          const method = init?.method ?? 'GET';
+          if (!serverOnline) {
+            throw new TypeError('Offline');
+          }
+          if (method === 'POST' && url.endsWith('/api/cuidadores/batch')) {
+            serverRoster = parseCuidadorList(JSON.parse(String(init?.body)));
+            batchBodies.push(serverRoster);
+            return jsonResponse(serverRoster);
+          }
+          return jsonResponse(serverRoster);
+        },
+      });
+
+      const tabA = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: null }),
+        api,
+        eventTarget: null,
+        broadcastChannelFactory: null,
+        eventSourceFactory: sseHub.factory,
+      });
+
+      try {
+        tabA.start();
+        await vi.waitFor(() => {
+          expect(tabA.getSnapshot().connectionStatus).toBe('local-first');
+        });
+
+        // Offline: o operador edita Ana e Carlos (sujeira desconhecida => fullBatchDirty = true).
+        await tabA.toggleCaregiverStatus(1);
+        await tabA.toggleCaregiverStatus(3);
+        expect(statusOf(tabA.getSnapshot().cuidadores, 1)).toBe('Faltou');
+        expect(statusOf(tabA.getSnapshot().cuidadores, 3)).toBe('Faltou');
+
+        // O servidor volta com Lucas Faltou (edição de outro dispositivo) e um frame ANTIGO sobre Ana/Carlos.
+        serverOnline = true;
+        const frameFromServer = getCanonicalSeed().map((c) =>
+          c.id === 2 ? applyStatusChange(c, 'Faltou') : c
+        );
+        serverRoster = frameFromServer;
+        sseHub.sockets[0]!.emitScheduleUpdated(frameFromServer, '2');
+
+        // Mais um clique, ainda sem onopen: o roster LOCAL vence (P2: sujeira global, não há como mesclar).
+        await tabA.toggleCaregiverStatus(4);
+
+        expect(batchBodies).toHaveLength(1);
+        expect(statusOf(batchBodies[0]!, 1)).toBe('Faltou');
+        expect(statusOf(batchBodies[0]!, 3)).toBe('Faltou');
+        expect(statusOf(batchBodies[0]!, 4)).toBe('Faltou');
+        // Documentação do limite aceito: Lucas Faltou do servidor NÃO entra, porque fullBatchDirty === true.
+        expect(statusOf(batchBodies[0]!, 2)).toBe('Presente');
+      } finally {
+        tabA.dispose();
+      }
+    });
+
+    it.fails(
+      '5.12 characterizes the stale retained frame limit (V3): the merge adopts the frame value for a card this tab already confirmed',
+      async () => {
+        const sseHub = createControllableEventSourceHub();
+        let serverRoster = getCanonicalSeed();
+        const batchBodies: Cuidador[][] = [];
+        let patchesResolved = 0;
+
+        const api: ReturnType<typeof createCaregiverApiClient> = {
+          baseUrl: DEFAULT_API_BASE_URL,
+          fetchCaregivers: async () => serverRoster,
+          syncCaregiversBatch: async (items) => {
+            batchBodies.push([...items]);
+            serverRoster = [...items];
+            return [...items];
+          },
+          resetCaregiversSchedule: async () => getCanonicalSeed(),
+          patchCaregiverStatus: (id, status, substituto, signal) => {
+            // Mariana (id 4) é confirmada na hora; os demais PATCHs ficam em voo até o aborto da promoção.
+            if (id === 4) {
+              patchesResolved += 1;
+              const base = getCanonicalSeed().find((c) => c.id === 4)!;
+              return Promise.resolve(applyStatusChange(base, status, substituto));
+            }
+            return new Promise<Cuidador>((_resolve, reject) => {
+              signal?.addEventListener('abort', () =>
+                reject(new CaregiverApiError('Aborted', 'aborted'))
+              );
+            });
+          },
+        };
+
+        const tabA = createCaregiverScheduleController({
+          store: createLocalFirstStore({ storage: null }),
+          api,
+          eventTarget: null,
+          broadcastChannelFactory: null,
+          eventSourceFactory: sseHub.factory,
+        });
+
+        try {
+          tabA.start();
+          sseHub.sockets[0]!.emitOpen();
+          await vi.waitFor(() => {
+            expect(tabA.getSnapshot().connectionStatus).toBe('online');
+          });
+
+          // A confirma Mariana (id 4) Faltou no servidor: nenhum card sujo, A sabe que Mariana é Faltou.
+          await tabA.toggleCaregiverStatus(4);
+          expect(patchesResolved).toBe(1);
+          expect(statusOf(tabA.getSnapshot().cuidadores, 4)).toBe('Faltou');
+
+          const p1 = tabA.toggleCaregiverStatus(1);
+          // Frame emitido ANTES da escrita de A sobre Mariana, mas entregue DEPOIS do 200 do PATCH (reordenação).
+          const staleFrame = getCanonicalSeed().map((c) =>
+            c.id === 2 ? applyStatusChange(c, 'Faltou') : c
+          );
+          sseHub.sockets[0]!.emitScheduleUpdated(staleFrame, '2');
+          const p3 = tabA.toggleCaregiverStatus(3);
+          await Promise.all([p1, p3]);
+
+          expect(batchBodies).toHaveLength(1);
+          // Edição de C preservada (objetivo do hotfix)...
+          expect(statusOf(batchBodies[0]!, 2)).toBe('Faltou');
+          // ...mas o frame VELHO sobrescreve Mariana, que a própria aba já tinha confirmado como Faltou.
+          // LIMITE CONHECIDO V3 (plano 15): só uma versão base no backend (opção C) ou a variante A+ o fecham.
+          // Se este comportamento mudar, atualize a ressalva do ADR-FE-017.
+          expect(statusOf(batchBodies[0]!, 4)).toBe('Presente');
+        } finally {
+          tabA.dispose();
+        }
+      }
+    );
   });
 });
