@@ -12,6 +12,21 @@ dist
 dist-ssr
 *.local
 
+# Environment variables & Secrets (Clean-Room Security Gate)
+.env
+.env.*
+!.env.example
+
+# Dados de funcionários e planilhas exportadas (LGPD): nunca versionar
+*.csv
+*.vcf
+*.xlsx
+*.db
+*.sqlite
+data/
+leads/
+clientes/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
