@@ -1974,5 +1974,50 @@ describe('FE #2 — Canonical Caregiver Contract, Local-First Store & Hybrid Syn
         tabA.dispose();
       }
     });
+
+    it('5.13 wires api.baseUrl and ssePrivacyRedacted into the EventSource stream URL', async () => {
+      const lanBase = 'http://192.168.1.50:8080';
+      const roster = getCanonicalSeed();
+      const api = createCaregiverApiClient({
+        baseUrl: lanBase,
+        fetchImpl: async () => jsonResponse(roster),
+      });
+
+      const urlsOpened: string[] = [];
+      const recordingFactory = (url: string): EventSourceLike | null => {
+        urlsOpened.push(url);
+        return null;
+      };
+
+      // Base different from the default, otherwise a controller that forgot to pass api.baseUrl would
+      // still build the same URL and this wiring could never be observed.
+      const defaultPrivacy = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: null }),
+        api,
+        eventTarget: null,
+        broadcastChannelFactory: null,
+        eventSourceFactory: recordingFactory,
+      });
+      const redactedStream = createCaregiverScheduleController({
+        store: createLocalFirstStore({ storage: null }),
+        api,
+        eventTarget: null,
+        broadcastChannelFactory: null,
+        eventSourceFactory: recordingFactory,
+        ssePrivacyRedacted: true,
+      });
+
+      try {
+        defaultPrivacy.start();
+        redactedStream.start();
+        expect(urlsOpened).toEqual([
+          `${lanBase}/api/cuidadores/stream`,
+          `${lanBase}/api/cuidadores/stream?privacy=true`,
+        ]);
+      } finally {
+        defaultPrivacy.dispose();
+        redactedStream.dispose();
+      }
+    });
   });
 });

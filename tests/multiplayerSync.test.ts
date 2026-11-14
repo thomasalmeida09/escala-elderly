@@ -606,6 +606,10 @@ describe('Multiplayer Dual-Layer Sync Engine (BroadcastChannel + W3C SSE)', () =
     expect(socket1.url).toBe('http://localhost:8080/api/cuidadores/stream');
     socket1.triggerOpen();
 
+    // The wire name must match CuidadorSseBroadcaster.EVENT_SCHEDULE_UPDATED byte for byte. The tests
+    // below import the constant on both sides, so only this literal catches a renamed value (S07).
+    expect(SSE_SCHEDULE_UPDATED_EVENT).toBe('SCHEDULE_UPDATED');
+
     // Generic unnamed message event is ignored (S07)
     socket1.emitNamedEvent('message', JSON.stringify(getCanonicalSeed()), '1');
     expect(receivedUpdates).toHaveLength(0);
