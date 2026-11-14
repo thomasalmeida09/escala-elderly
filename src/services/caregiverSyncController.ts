@@ -114,6 +114,34 @@ function areCaregiverListsEqual(first: readonly Cuidador[], second: readonly Cui
   return true;
 }
 
+/**
+ * Hotfix FE #5 (plano 15, F1): ao promover um clique a POST /batch (replace-all, sem versão base no
+ * servidor), os cards que esta aba NÃO editou devem vir da última visão do servidor que ela já recebeu
+ * (frame SSE retido), e não da cópia local, que pode estar velha.
+ *
+ * Contrato (puro, não lança, não muta as entradas):
+ *  - mesmo conjunto de ids e mesma ordem de `localList`;
+ *  - ids em `dirtyIds` (inclui o card recém-clicado): valor local;
+ *  - demais ids presentes em `serverView`: valor de `serverView`;
+ *  - demais ids ausentes de `serverView`: valor local (nunca remove nem inventa card).
+ *
+ * Limite conhecido: não fecha a janela em que o frame ainda está em trânsito, nem um frame retido
+ * mais velho que uma confirmação desta aba. Só uma versão base no backend fecha esses casos.
+ */
+function rebaseCleanCardsOntoServerView(
+  localList: readonly Cuidador[],
+  serverView: readonly Cuidador[],
+  dirtyIds: ReadonlySet<number>
+): Cuidador[] {
+  const serverById = new Map<number, Cuidador>();
+  for (const item of serverView) {
+    serverById.set(item.id, item);
+  }
+  return localList.map((item) =>
+    dirtyIds.has(item.id) ? item : (serverById.get(item.id) ?? item)
+  );
+}
+
 function createFrozenSnapshot(
   cuidadores: readonly Cuidador[],
   connectionStatus: ConnectionStatus,
@@ -745,11 +773,29 @@ export function createCaregiverScheduleController(
     if (!reconcilePushingDirtyBatch) {
       abortReconcileRequest();
     }
+    // F1 (plano 15): guarda o frame SSE retido ANTES de descartá-lo; se este clique promover a
+    // POST /batch (replace-all), os cards limpos devem sair dele e não da cópia local velha.
+    const retainedServerView = deferredSseSchedule;
     deferredSseSchedule = null;
     deferredCrossTabPayload = null;
 
     const updatedItem = computeUpdated(existing);
-    const nextList = snapshot.cuidadores.map((item) => (item.id === targetId ? updatedItem : item));
+    const localNextList = snapshot.cuidadores.map((item) =>
+      item.id === targetId ? updatedItem : item
+    );
+
+    // Tamanho que dirtyCardIds terá depois do add abaixo. Com fullBatchDirty a sujeira é global e
+    // dirtyCardIds não a descreve (V2): nesse caso o roster local vence, como antes do hotfix.
+    const dirtyCountAfterClick = dirtyCardIds.size + (dirtyCardIds.has(targetId) ? 0 : 1);
+    const mergesRetainedFrame =
+      !fullBatchDirty && dirtyCountAfterClick > 1 && retainedServerView !== null;
+    const nextList = mergesRetainedFrame
+      ? rebaseCleanCardsOntoServerView(
+          localNextList,
+          retainedServerView,
+          new Set<number>([...dirtyCardIds, targetId])
+        )
+      : localNextList;
 
     dirtyCardIds.add(targetId);
     const myRevision = ++revision;
