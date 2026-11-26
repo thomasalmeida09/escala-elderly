@@ -1,0 +1,26 @@
+name: Frontend CI (Ítalo)
+
+on:
+  push:
+    branches: ['italo/**']
+  pull_request:
+    branches: ['italo/**']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Instalar o Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Instalar dependências (exatamente as do bun.lock)
+        run: bun install --frozen-lockfile
+
+      - name: Lint (ESLint)
+        run: bun run lint
+
+      - name: Typecheck e build (tsc + vite)
+        run: bun run build
